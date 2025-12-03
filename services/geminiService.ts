@@ -63,7 +63,7 @@ const generateZImage = async (
       throw new Error("Z-Image API returned unsuccessful status or missing image data");
     }
 
-    const imageUrl = `data:image/png;base64,${data.base64}`;
+    const imageUrl = `data:image/webp;base64,${data.base64}`;
 
     return {
       id: crypto.randomUUID(),

@@ -101,6 +101,49 @@ export default function App() {
     setCurrentImage(image);
   };
 
+  const handleDownload = (imageUrl: string, fileName: string) => {
+    try {
+      // 1. Convert Base64 Data URL to a File object
+      // This ensures the browser treats it as a binary file download
+      const arr = imageUrl.split(',');
+      const mimeMatch = arr[0].match(/:(.*?);/);
+      const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      
+      // Create a File object from the binary data
+      const blob = new Blob([u8arr], { type: mime });
+      
+      // 2. Create Object URL from the File
+      const url = window.URL.createObjectURL(blob);
+      
+      // 3. Trigger Download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${fileName}.${mime.substring(6)}`;
+      document.body.appendChild(link);
+      link.click();
+      
+      // 4. Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download failed", err);
+      // Fallback to simple download if conversion fails
+      const link = document.createElement('a');
+      link.href = imageUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   return (
     <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden bg-gradient-brilliant">
       <div className="flex h-full grow flex-col">
@@ -289,14 +332,13 @@ export default function App() {
                      </TransformWrapper>
                      
                      <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-auto z-20">
-                        <a 
-                            href={currentImage.url} 
-                            download={`generated-${currentImage.id}.png`}
+                        <button 
+                            onClick={() => handleDownload(currentImage.url, `generated-${currentImage.id}`)}
                             title="Download Image"
-                            className="flex items-center justify-center h-10 w-10 rounded-lg bg-black/60 hover:bg-white text-white hover:text-black backdrop-blur-md transition-all shadow-lg border border-white/10"
+                            className="flex items-center justify-center h-10 w-10 rounded-lg bg-black/60 hover:bg-white text-white hover:text-black backdrop-blur-md transition-all shadow-lg border border-white/10 cursor-pointer"
                         >
                             <Download className="w-5 h-5" />
-                        </a>
+                        </button>
                      </div>
                   </div>
                 ) : !isLoading && (
