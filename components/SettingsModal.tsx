@@ -1,13 +1,17 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Save, Key } from 'lucide-react';
+import { X, Save, Key, Languages } from 'lucide-react';
+import { Language } from '../translations';
 
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
+    lang: Language;
+    setLang: (lang: Language) => void;
+    t: any;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, lang, setLang, t }) => {
     const [token, setToken] = useState('');
 
     useEffect(() => {
@@ -31,17 +35,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                          <div className="p-1.5 rounded-md bg-purple-500/10 text-purple-400">
                              <Key className="w-4 h-4" />
                          </div>
-                         <h2 className="text-lg font-bold text-white">Settings</h2>
+                         <h2 className="text-lg font-bold text-white">{t.settings}</h2>
                     </div>
                     <button onClick={onClose} className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
                 
-                <div className="p-6 space-y-5">
+                <div className="p-6 space-y-6">
+                    {/* Language Selector */}
+                    <div>
+                        <label className="flex items-center gap-2 text-sm font-medium text-white/90 mb-3">
+                            <Languages className="w-4 h-4 text-purple-400" />
+                            {t.language}
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={() => setLang('en')}
+                                className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all border ${
+                                    lang === 'en' 
+                                    ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/20' 
+                                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white'
+                                }`}
+                            >
+                                English
+                            </button>
+                            <button
+                                onClick={() => setLang('zh')}
+                                className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all border ${
+                                    lang === 'zh' 
+                                    ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/20' 
+                                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white'
+                                }`}
+                            >
+                                中文
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="h-px bg-white/5 w-full"></div>
+
+                    {/* HF Token */}
                     <div>
                         <label className="block text-sm font-medium text-white/90 mb-2">
-                            Hugging Face Token
+                            {t.hfToken}
                         </label>
                          <div className="relative">
                             <input
@@ -53,7 +90,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             />
                         </div>
                         <p className="mt-2 text-xs text-white/40 leading-relaxed">
-                            Optional. Provide <a className="text-purple-600" href="https://huggingface.co/settings/tokens" target="_blank">Access Token</a> to get more quota on Hugging Face.
+                            {t.hfTokenHelp} <a className="text-purple-600 hover:text-purple-400 underline decoration-purple-600/30" href="https://huggingface.co/settings/tokens" target="_blank">{t.hfTokenLink}</a> {t.hfTokenHelpEnd}
                         </p>
                     </div>
                 </div>
@@ -63,14 +100,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                         onClick={onClose}
                         className="px-4 py-2 text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                     >
-                        Cancel
+                        {t.cancel}
                     </button>
                     <button
                         onClick={handleSave}
                         className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 active:bg-purple-700 rounded-lg transition-colors shadow-lg shadow-purple-900/20"
                     >
                         <Save className="w-4 h-4" />
-                        Save
+                        {t.save}
                     </button>
                 </div>
             </div>

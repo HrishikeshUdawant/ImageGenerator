@@ -1,4 +1,5 @@
 
+
 export interface GeneratedImage {
     id: string;
     url: string;
@@ -7,6 +8,7 @@ export interface GeneratedImage {
     timestamp: number;
     model: string;
     seed?: number;
+    duration?: number;
 }
 
 export type AspectRatioOption = "1:1" | "3:2" | "2:3" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9";

@@ -1,11 +1,11 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { generateImage, optimizePrompt } from './services/hfService';
 import { GeneratedImage, AspectRatioOption, ModelOption } from './types';
 import { HistoryGallery } from './components/HistoryGallery';
 import { CustomSelect } from './components/CustomSelect';
 import { SettingsModal } from './components/SettingsModal';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import { translations, Language } from './translations';
 import { 
   Sparkles, 
   Dices, 
@@ -18,65 +18,126 @@ import {
   Plus,
   Wand2,
   Info,
-  Settings
+  Settings,
+  Trash2,
+  Copy,
+  Check,
+  Timer
 } from 'lucide-react';
-
-// Initial placeholder data
-const INITIAL_HISTORY: GeneratedImage[] = [];
 
 const MODEL_OPTIONS = [
   { value: 'z-image-turbo', label: 'Z-Image Turbo' },
   { value: 'qwen-image-fast', label: 'Qwen Image Fast' }
 ];
 
-const ASPECT_RATIO_OPTIONS = [
-  { value: '1:1', label: 'Square 1:1' },
-  { value: '9:16', label: 'Photography 9:16' },
-  { value: '16:9', label: 'Movie 16:9' },
-  { value: '4:5', label: 'Instagram 4:5' },
-  { value: '5:4', label: 'Print 5:4' },
-  { value: '3:4', label: 'Portrait 3:4' },
-  { value: '4:3', label: 'Landscape 4:3' },
-  { value: '3:2', label: 'Portrait 3:2' },
-  { value: '2:3', label: 'Landscape 2:3' },
-];
-
 export default function App() {
+  // Language Initialization
+  const [lang, setLang] = useState<Language>(() => {
+    const saved = localStorage.getItem('app_language');
+    if (saved === 'en' || saved === 'zh') return saved;
+    const browserLang = navigator.language.toLowerCase();
+    return browserLang.startsWith('zh') ? 'zh' : 'en';
+  });
+  
+  const t = translations[lang];
+
+  // Dynamic Aspect Ratio Options based on language
+  const aspectRatioOptions = [
+    { value: '1:1', label: t.ar_square },
+    { value: '9:16', label: t.ar_photo_9_16 },
+    { value: '16:9', label: t.ar_movie },
+    { value: '4:5', label: t.ar_insta },
+    { value: '5:4', label: t.ar_print },
+    { value: '3:4', label: t.ar_portrait_3_4 },
+    { value: '4:3', label: t.ar_landscape_4_3 },
+    { value: '3:2', label: t.ar_portrait_3_2 },
+    { value: '2:3', label: t.ar_landscape_2_3 },
+  ];
+
   const [prompt, setPrompt] = useState<string>('');
   const [model, setModel] = useState<ModelOption>('z-image-turbo');
   const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>('1:1');
-  const [seed, setSeed] = useState<string>(''); // Keep as string for input handling, convert to number for API
+  const [seed, setSeed] = useState<string>(''); 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
   const [currentImage, setCurrentImage] = useState<GeneratedImage | null>(null);
-  const [history, setHistory] = useState<GeneratedImage[]>(INITIAL_HISTORY);
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
+  // Initialize history from localStorage
+  const [history, setHistory] = useState<GeneratedImage[]>(() => {
+    try {
+      const saved = localStorage.getItem('ai_image_gen_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to load history", e);
+      return [];
+    }
+  });
+
   const [error, setError] = useState<string | null>(null);
   
   // New state for Info Popover
   const [showInfo, setShowInfo] = useState<boolean>(false);
   const [imageDimensions, setImageDimensions] = useState<{ width: number, height: number } | null>(null);
+  const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
 
   // Settings State
   const [showSettings, setShowSettings] = useState<boolean>(false);
+
+  // Language Persistence
+  useEffect(() => {
+    localStorage.setItem('app_language', lang);
+  }, [lang]);
+
+  // History Persistence
+  useEffect(() => {
+    localStorage.setItem('ai_image_gen_history', JSON.stringify(history));
+  }, [history]);
+
+  // Initial Selection Effect
+  useEffect(() => {
+    if (!currentImage && history.length > 0) {
+      setCurrentImage(history[0]);
+    }
+  }, [history.length]); 
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
     setIsLoading(true);
     setError(null);
-    setCurrentImage(null);
-    setShowInfo(false); // Close info when regenerating
+    setShowInfo(false); 
     setImageDimensions(null);
+    setElapsedTime(0);
+
+    const startTime = Date.now();
+    timerRef.current = setInterval(() => {
+        setElapsedTime((Date.now() - startTime) / 1000);
+    }, 100);
 
     try {
       const seedNumber = seed.trim() === '' ? undefined : parseInt(seed, 10);
-      const newImage = await generateImage(model, prompt, aspectRatio, seedNumber);
+      const result = await generateImage(model, prompt, aspectRatio, seedNumber);
+      
+      const endTime = Date.now();
+      const duration = (endTime - startTime) / 1000;
+      
+      const newImage = { ...result, duration };
       
       setCurrentImage(newImage);
       setHistory(prev => [newImage, ...prev]);
     } catch (err: any) {
       setError(err.message || "Failed to generate image. Please try again.");
     } finally {
+      if (timerRef.current) clearInterval(timerRef.current);
       setIsLoading(false);
     }
   };
@@ -91,8 +152,6 @@ export default function App() {
         setPrompt(optimized);
     } catch (err: any) {
         console.error("Optimization failed", err);
-        // We don't necessarily show a big error for this, maybe just shake or no-op
-        // But let's set a small error just in case
         setError("Failed to optimize prompt. Please try again.");
     } finally {
         setIsOptimizing(false);
@@ -114,58 +173,120 @@ export default function App() {
 
   const handleHistorySelect = (image: GeneratedImage) => {
     setCurrentImage(image);
-    setShowInfo(false); // Optionally close info on switch
-    setImageDimensions(null); // Reset dimensions until load
+    setShowInfo(false); 
+    setImageDimensions(null); 
   };
 
-  const handleDownload = (imageUrl: string, fileName: string) => {
-    const handleUrlDownload = (imageUrl: string, fileName: string) => {
-      const link = document.createElement('a');
-      link.href = imageUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-
-    if (/(https?:\/\/[^\s]+)/gi.test(imageUrl)) {
-      handleUrlDownload(imageUrl, fileName)
+  const handleDelete = () => {
+    if (!currentImage) return;
+    
+    const newHistory = history.filter(img => img.id !== currentImage.id);
+    setHistory(newHistory);
+    
+    if (newHistory.length > 0) {
+      setCurrentImage(newHistory[0]);
     } else {
-      try {
-        // 1. Convert Base64 Data URL to a File object
-        // This ensures the browser treats it as a binary file download
-        const arr = imageUrl.split(',');
-        const mimeMatch = arr[0].match(/:(.*?);/);
-        const mime = mimeMatch ? mimeMatch[1] : 'image/png';
-        const bstr = atob(arr[1]);
-        let n = bstr.length;
-        const u8arr = new Uint8Array(n);
-        
-        while (n--) {
-          u8arr[n] = bstr.charCodeAt(n);
-        }
-        
-        // Create a File object from the binary data
-        const blob = new Blob([u8arr], { type: mime });
-        
-        // 2. Create Object URL from the File
-        const url = window.URL.createObjectURL(blob);
-        
-        // 3. Trigger Download
+      setCurrentImage(null);
+    }
+    setShowInfo(false);
+  };
+
+  const handleCopyPrompt = async () => {
+    if (!currentImage?.prompt) return;
+    try {
+      await navigator.clipboard.writeText(currentImage.prompt);
+      setCopiedPrompt(true);
+      setTimeout(() => setCopiedPrompt(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy", err);
+    }
+  };
+
+  const handleDownload = async (imageUrl: string, fileName: string) => {
+    try {
+      // 1. Handle Base64 Data URLs directly
+      if (imageUrl.startsWith('data:')) {
         const link = document.createElement('a');
-        link.href = url;
-        link.download = `${fileName}.${mime.substring(6)}`;
+        link.href = imageUrl;
+        link.download = fileName.endsWith('.png') ? fileName : `${fileName}.png`;
         document.body.appendChild(link);
         link.click();
-        
-        // 4. Cleanup
         document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      } catch (err) {
-        console.error("Download failed", err);
-        // Fallback to simple download if conversion fails
-        handleUrlDownload(imageUrl, fileName);
+        return;
       }
+
+      // 2. Handle Remote URLs
+      try {
+        const response = await fetch(imageUrl, {
+            mode: 'cors', // Try to request with CORS
+        });
+        
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        // Determine extension from content-type or fallback to png
+        let extension = 'png';
+        if (blob.type) {
+             const typeParts = blob.type.split('/');
+             if (typeParts.length > 1) extension = typeParts[1];
+        }
+
+        const finalFileName = fileName.includes('.') ? fileName : `${fileName}.${extension}`;
+        
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = finalFileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Clean up
+        window.URL.revokeObjectURL(blobUrl);
+
+      } catch (fetchError) {
+        console.warn("Direct fetch failed, attempting canvas fallback...", fetchError);
+        
+        // 3. Fallback: Canvas (for images that load but fetch fails, e.g. strict CORS but allows display)
+        // This is a "best effort" - if the image is tainted, toBlob will fail.
+        await new Promise((resolve, reject) => {
+             const img = new Image();
+             img.crossOrigin = "Anonymous";
+             img.src = imageUrl;
+             img.onload = () => {
+                 const canvas = document.createElement('canvas');
+                 canvas.width = img.naturalWidth;
+                 canvas.height = img.naturalHeight;
+                 const ctx = canvas.getContext('2d');
+                 if (!ctx) {
+                     reject(new Error('Canvas context not found'));
+                     return;
+                 }
+                 ctx.drawImage(img, 0, 0);
+                 canvas.toBlob((blob) => {
+                     if (!blob) {
+                         reject(new Error('Canvas serialization failed (likely tainted)'));
+                         return;
+                     }
+                     const url = window.URL.createObjectURL(blob);
+                     const link = document.createElement('a');
+                     link.href = url;
+                     link.download = fileName.endsWith('.png') ? fileName : `${fileName}.png`;
+                     document.body.appendChild(link);
+                     link.click();
+                     document.body.removeChild(link);
+                     window.URL.revokeObjectURL(url);
+                     resolve(true);
+                 });
+             };
+             img.onerror = (e) => reject(e);
+        });
+      }
+    } catch (e) {
+      console.error("All download methods failed:", e);
+      // 4. Last Resort: Open in new tab
+      window.open(imageUrl, '_blank');
     }
   };
 
@@ -178,27 +299,47 @@ export default function App() {
     <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden bg-gradient-brilliant">
       <div className="flex h-full grow flex-col">
         {/* Header */}
-        <header className="flex items-center justify-between px-6 py-4 md:px-8 md:py-6 backdrop-blur-md sticky top-0 z-50 bg-background-dark/30 border-b border-white/5">
-          <div className="flex items-center gap-4 text-white">
+        <header className="flex items-center justify-between px-6 py-2 md:px-8 md:py-4 backdrop-blur-md sticky top-0 z-50 bg-background-dark/30 border-b border-white/5">
+          <div className="flex items-center gap-2 text-white">
             <div className="size-8">
-              <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w.org/2000/svg">
-                <g clipPath="url(#clip0_6_535)">
-                  <path clipRule="evenodd" d="M47.2426 24L24 47.2426L0.757355 24L24 0.757355L47.2426 24ZM12.2426 21H35.7574L24 9.24264L12.2426 21Z" fill="currentColor" fillRule="evenodd"></path>
-                </g>
-                <defs>
-                  <clipPath id="clip0_6_535">
-                    <rect fill="white" height="48" width="48"></rect>
-                  </clipPath>
-                </defs>
+              <svg
+              width="50"
+              height="50"
+              viewBox="0 0 50 50"
+              className="w-full h-full"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              >
+                  <g transform="translate(0, 5)">
+                    <rect
+                      x="2"
+                      y="2"
+                      width="36"
+                      height="36"
+                      rx="8"
+                      stroke="white"
+                      stroke-width="2.5"
+                    />
+                    <path d="M10 28L16 20L22 26L28 16L34 28H10Z" fill="white" />
+                    <circle cx="16" cy="12" r="3" fill="white" />
+
+                    <g transform="translate(28, -4)">
+                      <path
+                        d="M10 0C10 5.52285 5.52285 10 0 10C5.52285 10 10 14.4772 10 20C10 14.4772 14.4772 10 20 10C14.4772 10 10 5.52285 10 0Z"
+                        fill="white"
+                      />
+                      <circle cx="0" cy="20" r="3" fill="white" />
+                    </g>
+                  </g>
               </svg>
             </div>
-            <h1 className="text-white text-xl font-bold leading-tight tracking-[-0.015em]">AI Image Gen</h1>
+            <h1 className="text-white text-xl font-bold leading-tight tracking-[-0.015em]">{t.appTitle}</h1>
           </div>
           
           <button
             onClick={() => setShowSettings(true)}
             className="flex items-center justify-center p-2.5 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all active:scale-95"
-            title="Settings"
+            title={t.settings}
           >
             <Settings className="w-6 h-6" />
           </button>
@@ -215,19 +356,19 @@ export default function App() {
                 <div className="group">
                   <label className="flex flex-col flex-1">
                     <div className="flex items-center justify-between pb-3">
-                        <p className="text-white text-lg font-medium leading-normal group-focus-within:text-purple-400 transition-colors">Prompt</p>
+                        <p className="text-white text-lg font-medium leading-normal group-focus-within:text-purple-400 transition-colors">{t.prompt}</p>
                         <button
                             onClick={handleOptimizePrompt}
                             disabled={isOptimizing || !prompt.trim()}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white/60 bg-white/5 hover:bg-white/10 hover:text-purple-300 rounded-lg transition-all border border-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Enhance prompt with AI"
+                            title={t.optimizeTitle}
                         >
                             {isOptimizing ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
                                 <Wand2 className="w-3.5 h-3.5" />
                             )}
-                            {isOptimizing ? 'Optimizing...' : 'Optimize'}
+                            {isOptimizing ? t.optimizing : t.optimize}
                         </button>
                     </div>
                     <textarea 
@@ -235,7 +376,7 @@ export default function App() {
                       onChange={(e) => setPrompt(e.target.value)}
                       disabled={isOptimizing}
                       className="form-input flex w-full min-w-0 flex-1 resize-none rounded-lg text-white/90 focus:outline-0 focus:ring-2 focus:ring-purple-500/50 border border-white/10 bg-white/5 focus:border-purple-500 min-h-36 placeholder:text-white/30 p-4 text-base font-normal leading-normal transition-all disabled:opacity-50 disabled:cursor-not-allowed" 
-                      placeholder="A synthwave-style illustration of a futuristic city..."
+                      placeholder={t.promptPlaceholder}
                     />
                   </label>
                 </div>
@@ -244,7 +385,7 @@ export default function App() {
                 <div className="space-y-6">
                   {/* Model Selection */}
                   <CustomSelect
-                    label="Model"
+                    label={t.model}
                     value={model}
                     onChange={(val) => setModel(val as ModelOption)}
                     options={MODEL_OPTIONS}
@@ -253,17 +394,17 @@ export default function App() {
 
                   {/* Aspect Ratio */}
                   <CustomSelect
-                    label="Aspect Ratio"
+                    label={t.aspectRatio}
                     value={aspectRatio}
                     onChange={(val) => setAspectRatio(val as AspectRatioOption)}
-                    options={ASPECT_RATIO_OPTIONS}
+                    options={aspectRatioOptions}
                   />
 
                   {/* Seed */}
                   <div className="group">
                     <div className="flex items-center justify-between pb-3">
-                      <p className="text-white text-lg font-medium leading-normal group-focus-within:text-purple-400 transition-colors">Seed</p>
-                      <span className="text-white/50 text-sm">Optional</span>
+                      <p className="text-white text-lg font-medium leading-normal group-focus-within:text-purple-400 transition-colors">{t.seed}</p>
+                      <span className="text-white/50 text-sm">{t.seedOptional}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="flex flex-1 items-center rounded-lg border border-white/10 bg-white/5 focus-within:ring-2 focus-within:ring-purple-500/50 focus-within:border-purple-500 transition-all h-12 overflow-hidden">
@@ -278,7 +419,7 @@ export default function App() {
                             value={seed}
                             onChange={(e) => setSeed(e.target.value)}
                             className="form-input flex-1 h-full bg-transparent border-none text-white/90 focus:ring-0 placeholder:text-white/30 px-2 text-sm font-medium text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
-                            placeholder="Random" 
+                            placeholder={t.seedPlaceholder}
                         />
                         <button 
                             onClick={() => handleAdjustSeed(1)}
@@ -309,12 +450,12 @@ export default function App() {
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <Loader2 className="animate-spin w-5 h-5" />
-                    <span>Dreaming...</span>
+                    <span>{t.dreaming}</span>
                   </div>
                 ) : (
                   <span className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 group-hover:animate-pulse" />
-                    <span className="truncate">Generate</span>
+                    <span className="truncate">{t.generate}</span>
                   </span>
                 )}
               </button>
@@ -322,7 +463,6 @@ export default function App() {
           </aside>
 
           {/* Right Column: Preview & Gallery */}
-          {/* Added overflow-x-hidden to correct desktop layout overflow */}
           <div className="flex-1 flex flex-col overflow-x-hidden">
             
             {/* Main Preview Area */}
@@ -337,14 +477,15 @@ export default function App() {
                                 <Paintbrush className="text-purple-400 animate-pulse w-8 h-8" />
                             </div>
                          </div>
-                         <p className="mt-8 text-white/80 font-medium animate-pulse text-lg">Creating your masterpiece...</p>
+                         <p className="mt-8 text-white/80 font-medium animate-pulse text-lg">{t.dreaming}</p>
+                         <p className="mt-2 font-mono text-purple-300 text-lg">{elapsedTime.toFixed(1)}s</p>
                     </div>
                 ) : null}
 
                 {error ? (
                     <div className="text-center text-red-400 p-8 max-w-md animate-in zoom-in-95 duration-300">
                         <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-500/50" />
-                        <h3 className="text-xl font-bold text-white mb-2">Generation Failed</h3>
+                        <h3 className="text-xl font-bold text-white mb-2">{t.generationFailed}</h3>
                         <p className="text-white/60">{error}</p>
                     </div>
                 ) : currentImage ? (
@@ -365,6 +506,7 @@ export default function App() {
                             src={currentImage.url} 
                             alt={currentImage.prompt} 
                             className="max-w-full max-h-full object-contain shadow-2xl cursor-grab active:cursor-grabbing"
+                            onContextMenu={(e) => e.preventDefault()}
                             onLoad={(e) => {
                                 setImageDimensions({
                                     width: e.currentTarget.naturalWidth,
@@ -377,57 +519,100 @@ export default function App() {
                      
                      {/* Info Popover */}
                      {showInfo && (
-                       <div className="absolute bottom-20 left-6 z-30 w-72 bg-[#1A1625]/75 backdrop-blur-md border border-white/10 rounded-xl p-4 shadow-2xl text-sm text-white/80 animate-in slide-in-from-bottom-2 fade-in duration-200">
-                          <h4 className="font-medium text-white mb-2 border-b border-white/10 pb-2">Image Details</h4>
-                          <div className="space-y-3">
-                            <div>
-                              <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Model</span>
-                              <p className="text-white/90">{getModelLabel(currentImage.model)}</p>
-                            </div>
-                            <div>
-                              <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Dimensions</span>
-                              <p className="text-white/90">
-                                {imageDimensions ? `${imageDimensions.width} x ${imageDimensions.height} (${currentImage.aspectRatio})` : currentImage.aspectRatio}
-                              </p>
-                            </div>
-                            {currentImage.seed !== undefined && (
+                       <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 w-[90%] md:w-[400px] bg-[#1A1625]/95 backdrop-blur-md border border-white/10 rounded-xl p-5 shadow-2xl text-sm text-white/80 animate-in slide-in-from-bottom-2 fade-in duration-200">
+                          <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
+                             <h4 className="font-medium text-white">{t.imageDetails}</h4>
+                             <button onClick={() => setShowInfo(false)} className="text-white/40 hover:text-white">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                             </button>
+                          </div>
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                   <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Seed</span>
-                                   <p className="font-mono text-white/90">{currentImage.seed}</p>
+                                    <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">{t.model}</span>
+                                    <p className="text-white/90">{getModelLabel(currentImage.model)}</p>
                                 </div>
-                            )}
+                                <div>
+                                    <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">{t.dimensions}</span>
+                                    <p className="text-white/90">
+                                        {imageDimensions ? `${imageDimensions.width} x ${imageDimensions.height} (${currentImage.aspectRatio})` : currentImage.aspectRatio}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                {currentImage.seed !== undefined && (
+                                    <div>
+                                    <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">{t.seed}</span>
+                                    <p className="font-mono text-white/90">{currentImage.seed}</p>
+                                    </div>
+                                )}
+                                {currentImage.duration !== undefined && (
+                                    <div>
+                                    <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">{t.duration}</span>
+                                    <p className="font-mono text-white/90 flex items-center gap-1">
+                                        <Timer className="w-3 h-3 text-purple-400" />
+                                        {currentImage.duration.toFixed(1)}s
+                                    </p>
+                                    </div>
+                                )}
+                            </div>
                             <div>
-                              <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Prompt</span>
-                              <div className="max-h-24 overflow-y-auto scrollbar-hide">
-                                <p className="text-xs leading-relaxed text-white/70 italic">{currentImage.prompt}</p>
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold">{t.prompt}</span>
+                                    <button 
+                                        onClick={handleCopyPrompt}
+                                        className="flex items-center gap-1.5 text-[10px] font-medium text-purple-400 hover:text-purple-300 transition-colors"
+                                    >
+                                        {copiedPrompt ? (
+                                            <>
+                                                <Check className="w-3 h-3" />
+                                                {t.copied}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Copy className="w-3 h-3" />
+                                                {t.copy}
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                              <div className="max-h-24 overflow-y-auto custom-scrollbar p-2 bg-black/20 rounded-lg border border-white/5">
+                                <p className="text-xs leading-relaxed text-white/70 italic select-text">{currentImage.prompt}</p>
                               </div>
                             </div>
                           </div>
                        </div>
                      )}
 
-                     {/* Action Buttons Container */}
-                     <div className="absolute bottom-6 left-6 right-6 flex items-center justify-between pointer-events-none">
-                         {/* Left: Info Button */}
-                         <div className="pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                            <button
+                     {/* Unified Action Toolbar */}
+                     <div className="absolute bottom-6 inset-x-0 flex justify-center pointer-events-none">
+                         <div className="pointer-events-auto flex items-center gap-1 p-1.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 shadow-2xl transition-opacity duration-300 opacity-100 md:opacity-0 md:group-hover:opacity-100">
+                             
+                             <button
                                 onClick={() => setShowInfo(!showInfo)}
-                                title="Image Details"
-                                className={`flex items-center justify-center h-10 w-10 rounded-lg backdrop-blur-md transition-all shadow-lg border border-white/10 cursor-pointer ${showInfo ? 'bg-purple-600 text-white' : 'bg-black/60 hover:bg-white text-white hover:text-black'}`}
-                            >
+                                title={t.details}
+                                className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${showInfo ? 'bg-purple-600 text-white shadow-lg' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+                             >
                                 <Info className="w-5 h-5" />
-                            </button>
-                         </div>
-                         
-                         {/* Right: Download Button */}
-                         <div className="pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                            <button 
+                             </button>
+
+                             <div className="w-px h-5 bg-white/10 mx-1"></div>
+                             
+                             <button 
                                 onClick={() => handleDownload(currentImage.url, `generated-${currentImage.id}`)}
-                                title="Download Image"
-                                className="flex items-center justify-center h-10 w-10 rounded-lg bg-black/60 hover:bg-white text-white hover:text-black backdrop-blur-md transition-all shadow-lg border border-white/10 cursor-pointer"
-                            >
+                                title={t.download}
+                                className="flex items-center justify-center w-10 h-10 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all"
+                             >
                                 <Download className="w-5 h-5" />
-                            </button>
+                             </button>
+                             
+                             <button 
+                                onClick={handleDelete}
+                                title={t.delete}
+                                className="flex items-center justify-center w-10 h-10 rounded-xl text-white/70 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                             >
+                                <Trash2 className="w-5 h-5" />
+                             </button>
                          </div>
                      </div>
                   </div>
@@ -437,8 +622,8 @@ export default function App() {
                         <Sparkles className="w-20 h-20 text-white/10" />
                         <Sparkles className="w-20 h-20 text-purple-500/40 absolute top-0 left-0 blur-lg animate-pulse" />
                     </div>
-                    <h2 className="mt-6 text-2xl font-bold text-white/90">Creations Appear Here</h2>
-                    <p className="mt-2 text-base text-white/40 max-w-xs mx-auto">Describe your vision and watch it come to life using AI.</p>
+                    <h2 className="mt-6 text-2xl font-bold text-white/90">{t.galleryEmptyTitle}</h2>
+                    <p className="mt-2 text-base text-white/40 max-w-xs mx-auto">{t.galleryEmptyDesc}</p>
                   </div>
                 )}
               </div>
@@ -455,7 +640,13 @@ export default function App() {
         </main>
         
         {/* Settings Modal */}
-        <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+        <SettingsModal 
+            isOpen={showSettings} 
+            onClose={() => setShowSettings(false)} 
+            lang={lang}
+            setLang={setLang}
+            t={t}
+        />
       </div>
     </div>
   );
