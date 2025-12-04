@@ -467,7 +467,7 @@ export default function App() {
             
             {/* Main Preview Area */}
             <section className="flex-1 flex flex-col w-full min-h-[360px] max-h-[450px]">
-              <div className="w-full flex-grow flex flex-col items-center justify-center bg-black/20 rounded-xl backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/20 overflow-hidden relative group">
+              <div className="relative w-full flex-grow flex flex-col items-center justify-center bg-black/20 rounded-xl backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/20 overflow-hidden relative group">
                 
                 {isLoading ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black/40 backdrop-blur-sm animate-in fade-in duration-500">
@@ -489,7 +489,7 @@ export default function App() {
                         <p className="text-white/60">{error}</p>
                     </div>
                 ) : currentImage ? (
-                  <div className="relative w-full h-full flex items-center justify-center bg-black/40 animate-in zoom-in-95 duration-500">
+                  <div className="w-full h-full flex items-center justify-center bg-black/40 animate-in zoom-in-95 duration-500">
                      <TransformWrapper
                         initialScale={1}
                         minScale={1}
@@ -585,7 +585,7 @@ export default function App() {
                      )}
 
                      {/* Unified Action Toolbar */}
-                     <div className="absolute bottom-6 inset-x-0 flex justify-center pointer-events-none">
+                     <div className="absolute bottom-6 inset-x-0 flex justify-center pointer-events-none z-40">
                          <div className="pointer-events-auto flex items-center gap-1 p-1.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 shadow-2xl transition-opacity duration-300 opacity-100 md:opacity-0 md:group-hover:opacity-100">
                              
                              <button
