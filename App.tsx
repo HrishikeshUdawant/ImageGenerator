@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { generateImage, optimizePrompt } from './services/geminiService';
 import { GeneratedImage, AspectRatioOption, ModelOption } from './types';
@@ -14,7 +15,8 @@ import {
   Cpu,
   Minus,
   Plus,
-  Wand2
+  Wand2,
+  Info
 } from 'lucide-react';
 
 // Initial placeholder data
@@ -45,6 +47,10 @@ export default function App() {
   const [currentImage, setCurrentImage] = useState<GeneratedImage | null>(null);
   const [history, setHistory] = useState<GeneratedImage[]>(INITIAL_HISTORY);
   const [error, setError] = useState<string | null>(null);
+  
+  // New state for Info Popover
+  const [showInfo, setShowInfo] = useState<boolean>(false);
+  const [imageDimensions, setImageDimensions] = useState<{ width: number, height: number } | null>(null);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -52,6 +58,8 @@ export default function App() {
     setIsLoading(true);
     setError(null);
     setCurrentImage(null);
+    setShowInfo(false); // Close info when regenerating
+    setImageDimensions(null);
 
     try {
       const seedNumber = seed.trim() === '' ? undefined : parseInt(seed, 10);
@@ -99,6 +107,8 @@ export default function App() {
 
   const handleHistorySelect = (image: GeneratedImage) => {
     setCurrentImage(image);
+    setShowInfo(false); // Optionally close info on switch
+    setImageDimensions(null); // Reset dimensions until load
   };
 
   const handleDownload = (imageUrl: string, fileName: string) => {
@@ -142,6 +152,11 @@ export default function App() {
       link.click();
       document.body.removeChild(link);
     }
+  };
+
+  const getModelLabel = (modelValue: string) => {
+      const option = MODEL_OPTIONS.find(o => o.value === modelValue);
+      return option ? option.label : modelValue;
   };
 
   return (
@@ -327,18 +342,70 @@ export default function App() {
                             src={currentImage.url} 
                             alt={currentImage.prompt} 
                             className="max-w-full max-h-full object-contain shadow-2xl cursor-grab active:cursor-grabbing"
+                            onLoad={(e) => {
+                                setImageDimensions({
+                                    width: e.currentTarget.naturalWidth,
+                                    height: e.currentTarget.naturalHeight
+                                });
+                            }}
                          />
                        </TransformComponent>
                      </TransformWrapper>
                      
-                     <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-auto z-20">
-                        <button 
-                            onClick={() => handleDownload(currentImage.url, `generated-${currentImage.id}`)}
-                            title="Download Image"
-                            className="flex items-center justify-center h-10 w-10 rounded-lg bg-black/60 hover:bg-white text-white hover:text-black backdrop-blur-md transition-all shadow-lg border border-white/10 cursor-pointer"
-                        >
-                            <Download className="w-5 h-5" />
-                        </button>
+                     {/* Info Popover */}
+                     {showInfo && (
+                       <div className="absolute bottom-20 left-6 z-30 w-72 bg-[#1A1625]/75 backdrop-blur-md border border-white/10 rounded-xl p-4 shadow-2xl text-sm text-white/80 animate-in slide-in-from-bottom-2 fade-in duration-200">
+                          <h4 className="font-medium text-white mb-2 border-b border-white/10 pb-2">Image Details</h4>
+                          <div className="space-y-3">
+                            <div>
+                              <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Model</span>
+                              <p className="text-white/90">{getModelLabel(currentImage.model)}</p>
+                            </div>
+                            <div>
+                              <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Dimensions</span>
+                              <p className="text-white/90">
+                                {imageDimensions ? `${imageDimensions.width} x ${imageDimensions.height} (${currentImage.aspectRatio})` : currentImage.aspectRatio}
+                              </p>
+                            </div>
+                            {currentImage.seed !== undefined && (
+                                <div>
+                                   <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Seed</span>
+                                   <p className="font-mono text-white/90">{currentImage.seed}</p>
+                                </div>
+                            )}
+                            <div>
+                              <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Prompt</span>
+                              <div className="max-h-24 overflow-y-auto scrollbar-hide">
+                                <p className="text-xs leading-relaxed text-white/70 italic">{currentImage.prompt}</p>
+                              </div>
+                            </div>
+                          </div>
+                       </div>
+                     )}
+
+                     {/* Action Buttons Container */}
+                     <div className="absolute bottom-6 left-6 right-6 flex items-center justify-between pointer-events-none">
+                         {/* Left: Info Button */}
+                         <div className="pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <button
+                                onClick={() => setShowInfo(!showInfo)}
+                                title="Image Details"
+                                className={`flex items-center justify-center h-10 w-10 rounded-lg backdrop-blur-md transition-all shadow-lg border border-white/10 cursor-pointer ${showInfo ? 'bg-purple-600 text-white' : 'bg-black/60 hover:bg-white text-white hover:text-black'}`}
+                            >
+                                <Info className="w-5 h-5" />
+                            </button>
+                         </div>
+                         
+                         {/* Right: Download Button */}
+                         <div className="pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <button 
+                                onClick={() => handleDownload(currentImage.url, `generated-${currentImage.id}`)}
+                                title="Download Image"
+                                className="flex items-center justify-center h-10 w-10 rounded-lg bg-black/60 hover:bg-white text-white hover:text-black backdrop-blur-md transition-all shadow-lg border border-white/10 cursor-pointer"
+                            >
+                                <Download className="w-5 h-5" />
+                            </button>
+                         </div>
                      </div>
                   </div>
                 ) : !isLoading && (

@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { GeneratedImage, AspectRatioOption, ModelOption } from "../types";
 
@@ -29,7 +30,7 @@ const getZImageDimensions = (ratio: AspectRatioOption): { width: number; height:
 const generateZImage = async (
   prompt: string,
   aspectRatio: AspectRatioOption,
-  seed?: number
+  seed: number = Math.round(Math.random() * 99999)
 ): Promise<GeneratedImage> => {
   const { width, height } = getZImageDimensions(aspectRatio);
 
@@ -37,8 +38,10 @@ const generateZImage = async (
     prompt,
     width,
     height,
+    seed
   };
 
+  
   if (seed !== undefined) {
     body.seed = seed;
   }
@@ -71,6 +74,8 @@ const generateZImage = async (
       prompt,
       aspectRatio,
       timestamp: Date.now(),
+      model: "z-image-turbo",
+      seed,
     };
   } catch (error) {
     console.error("Z-Image-Turbo Generation Error:", error);
@@ -131,6 +136,8 @@ const generateGeminiImage = async (
       prompt,
       aspectRatio,
       timestamp: Date.now(),
+      model: "gemini-2.5-flash-image",
+      seed,
     };
 
   } catch (error) {
