@@ -9,9 +9,9 @@ export interface GeneratedImage {
     seed?: number;
 }
 
-export type AspectRatioOption = "1:1" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9";
+export type AspectRatioOption = "1:1" | "3:2" | "2:3" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9";
 
-export type ModelOption = "gemini-2.5-flash-image" | "z-image-turbo";
+export type ModelOption = "qwen-image-fast" | "z-image-turbo";
 
 export interface GenerationParams {
     model: ModelOption;

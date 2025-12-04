@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
-import { generateImage, optimizePrompt } from './services/geminiService';
+import { generateImage, optimizePrompt } from './services/hfService';
 import { GeneratedImage, AspectRatioOption, ModelOption } from './types';
 import { HistoryGallery } from './components/HistoryGallery';
 import { CustomSelect } from './components/CustomSelect';
+import { SettingsModal } from './components/SettingsModal';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { 
   Sparkles, 
@@ -16,7 +17,8 @@ import {
   Minus,
   Plus,
   Wand2,
-  Info
+  Info,
+  Settings
 } from 'lucide-react';
 
 // Initial placeholder data
@@ -24,7 +26,7 @@ const INITIAL_HISTORY: GeneratedImage[] = [];
 
 const MODEL_OPTIONS = [
   { value: 'z-image-turbo', label: 'Z-Image Turbo' },
-  { value: 'gemini-2.5-flash-image', label: 'Nano Banana' }
+  { value: 'qwen-image-fast', label: 'Qwen Image Fast' }
 ];
 
 const ASPECT_RATIO_OPTIONS = [
@@ -35,6 +37,8 @@ const ASPECT_RATIO_OPTIONS = [
   { value: '5:4', label: 'Print 5:4' },
   { value: '3:4', label: 'Portrait 3:4' },
   { value: '4:3', label: 'Landscape 4:3' },
+  { value: '3:2', label: 'Portrait 3:2' },
+  { value: '2:3', label: 'Landscape 2:3' },
 ];
 
 export default function App() {
@@ -51,6 +55,9 @@ export default function App() {
   // New state for Info Popover
   const [showInfo, setShowInfo] = useState<boolean>(false);
   const [imageDimensions, setImageDimensions] = useState<{ width: number, height: number } | null>(null);
+
+  // Settings State
+  const [showSettings, setShowSettings] = useState<boolean>(false);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -112,45 +119,53 @@ export default function App() {
   };
 
   const handleDownload = (imageUrl: string, fileName: string) => {
-    try {
-      // 1. Convert Base64 Data URL to a File object
-      // This ensures the browser treats it as a binary file download
-      const arr = imageUrl.split(',');
-      const mimeMatch = arr[0].match(/:(.*?);/);
-      const mime = mimeMatch ? mimeMatch[1] : 'image/png';
-      const bstr = atob(arr[1]);
-      let n = bstr.length;
-      const u8arr = new Uint8Array(n);
-      
-      while (n--) {
-        u8arr[n] = bstr.charCodeAt(n);
-      }
-      
-      // Create a File object from the binary data
-      const blob = new Blob([u8arr], { type: mime });
-      
-      // 2. Create Object URL from the File
-      const url = window.URL.createObjectURL(blob);
-      
-      // 3. Trigger Download
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${fileName}.${mime.substring(6)}`;
-      document.body.appendChild(link);
-      link.click();
-      
-      // 4. Cleanup
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Download failed", err);
-      // Fallback to simple download if conversion fails
+    const handleUrlDownload = (imageUrl: string, fileName: string) => {
       const link = document.createElement('a');
       link.href = imageUrl;
       link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+    }
+
+    if (/(https?:\/\/[^\s]+)/gi.test(imageUrl)) {
+      handleUrlDownload(imageUrl, fileName)
+    } else {
+      try {
+        // 1. Convert Base64 Data URL to a File object
+        // This ensures the browser treats it as a binary file download
+        const arr = imageUrl.split(',');
+        const mimeMatch = arr[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        
+        // Create a File object from the binary data
+        const blob = new Blob([u8arr], { type: mime });
+        
+        // 2. Create Object URL from the File
+        const url = window.URL.createObjectURL(blob);
+        
+        // 3. Trigger Download
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${fileName}.${mime.substring(6)}`;
+        document.body.appendChild(link);
+        link.click();
+        
+        // 4. Cleanup
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error("Download failed", err);
+        // Fallback to simple download if conversion fails
+        handleUrlDownload(imageUrl, fileName);
+      }
     }
   };
 
@@ -179,6 +194,14 @@ export default function App() {
             </div>
             <h1 className="text-white text-xl font-bold leading-tight tracking-[-0.015em]">AI Image Gen</h1>
           </div>
+          
+          <button
+            onClick={() => setShowSettings(true)}
+            className="flex items-center justify-center p-2.5 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+            title="Settings"
+          >
+            <Settings className="w-6 h-6" />
+          </button>
         </header>
 
         <main className="w-full max-w-7xl flex-1 flex flex-col md:items-stretch md:mx-auto md:flex-row gap-6 px-6 md:px-6 pb-8 pt-6">
@@ -430,6 +453,9 @@ export default function App() {
 
           </div>
         </main>
+        
+        {/* Settings Modal */}
+        <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
       </div>
     </div>
   );
