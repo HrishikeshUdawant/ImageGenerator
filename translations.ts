@@ -1,6 +1,4 @@
 
-
-
 export type Language = 'en' | 'zh';
 
 export const translations = {
@@ -38,9 +36,10 @@ export const translations = {
     cancel: "Cancel",
     save: "Save",
     language: "Language",
-    
+    hd: "HD",
+
     // Aspect Ratios
-    ar_square: "Square 1:1",
+    ar_square: "Default 1:1",
     ar_photo_9_16: "Photography 9:16",
     ar_movie: "Movie 16:9",
     ar_insta: "Instagram 4:5",
@@ -84,9 +83,10 @@ export const translations = {
     cancel: "取消",
     save: "保存",
     language: "语言",
+    hd: "高清",
 
     // Aspect Ratios
-    ar_square: "方形 1:1",
+    ar_square: "默认 1:1",
     ar_photo_9_16: "摄影 9:16",
     ar_movie: "电影 16:9",
     ar_insta: "社交媒体 4:5",

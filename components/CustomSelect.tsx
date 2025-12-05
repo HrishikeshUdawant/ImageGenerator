@@ -12,9 +12,10 @@ interface CustomSelectProps {
   onChange: (value: string) => void;
   options: Option[];
   icon?: React.ReactNode;
+  headerContent?: React.ReactNode;
 }
 
-export const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, onChange, options, icon }) => {
+export const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, onChange, options, icon, headerContent }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -35,9 +36,12 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, onChan
 
   return (
     <div className="group relative" ref={containerRef}>
-      <p className="text-white text-lg font-medium leading-normal pb-3 group-focus-within:text-purple-400 transition-colors">
-        {label}
-      </p>
+      <div className="flex items-center justify-between pb-3">
+        <p className="text-white text-lg font-medium leading-normal group-focus-within:text-purple-400 transition-colors">
+          {label}
+        </p>
+        {headerContent}
+      </div>
       
       <button
         type="button"

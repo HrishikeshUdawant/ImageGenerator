@@ -1,31 +1,54 @@
-
 import { GeneratedImage, AspectRatioOption, ModelOption } from "../types";
 
 const ZIMAGE_BASE_API_URL = "https://luca115-z-image-turbo.hf.space";
 const QWEN_IMAGE_BASE_API_URL = "https://mcp-tools-qwen-image-fast.hf.space";
 const POLLINATIONS_API_URL = "https://text.pollinations.ai/openai";
 
-const getZImageDimensions = (ratio: AspectRatioOption): { width: number; height: number } => {
-  switch (ratio) {
-    case "16:9":
-      return { width: 1280, height: 720 };
-    case "5:4":
-      return { width: 1280, height: 1024 };
-    case "4:3":
-      return { width: 1024, height: 768 };
-    case "3:2":
-      return { width: 1536, height: 1024 };
-    case "9:16":
-      return { width: 720, height: 1280 };
-    case "4:5":
-      return { width: 1024, height: 1280 };
-    case "3:4":
-      return { width: 768, height: 1024 };
-    case "2:3":
-      return { width: 1024, height: 1536 };
-    case "1:1":
-    default:
-      return { width: 1024, height: 1024 };
+const getZImageDimensions = (ratio: AspectRatioOption, enableHD: boolean): { width: number; height: number } => {
+  if (enableHD) {
+    switch (ratio) {
+      case "16:9":
+        return { width: 2048, height: 1152 };
+      case "5:4":
+        return { width: 1920, height: 1536 };
+      case "4:3":
+        return { width: 2048, height: 1536 };
+      case "3:2":
+        return { width: 1920, height: 1280 };
+      case "9:16":
+        return { width: 1152, height: 2048 };
+      case "4:5":
+        return { width: 1536, height: 1920 };
+      case "3:4":
+        return { width: 1536, height: 2048 };
+      case "2:3":
+        return { width: 1280, height: 1920 };
+      case "1:1":
+      default:
+        return { width: 2048, height: 2048 };
+    }
+  } else {
+      switch (ratio) {
+      case "16:9":
+        return { width: 1280, height: 720 };
+      case "5:4":
+        return { width: 1280, height: 1024 };
+      case "4:3":
+        return { width: 1024, height: 768 };
+      case "3:2":
+        return { width: 1536, height: 1024 };
+      case "9:16":
+        return { width: 720, height: 1280 };
+      case "4:5":
+        return { width: 1024, height: 1280 };
+      case "3:4":
+        return { width: 768, height: 1024 };
+      case "2:3":
+        return { width: 1024, height: 1536 };
+      case "1:1":
+      default:
+        return { width: 1024, height: 1024 };
+    }
   }
 };
 
@@ -70,9 +93,10 @@ function extractCompleteEventData(sseStream: string): any | null {
 const generateZImage = async (
   prompt: string,
   aspectRatio: AspectRatioOption,
-  seed?: number
+  seed?: number,
+  enableHD: boolean = false
 ): Promise<GeneratedImage> => {
-  const { width, height } = getZImageDimensions(aspectRatio);
+  let { width, height } = getZImageDimensions(aspectRatio, enableHD);
 
   try {
     const queue = await fetch(ZIMAGE_BASE_API_URL + '/gradio_api/call/generate_image', {
@@ -107,9 +131,15 @@ const generateZImage = async (
 const generateQwenImage = async (
   prompt: string,
   aspectRatio: AspectRatioOption,
-  seed?: number
+  seed?: number,
+  enableHD: boolean = false
 ): Promise<GeneratedImage> => {
   try {
+    // Note: Qwen Image Fast via this API currently takes strict aspect ratio strings.
+    // We cannot explicitly set dimensions to 2x like we can with Z-Image.
+    // If enableHD is true, it will simply regenerate (potentially with same seed) 
+    // but the resolution remains bound by the model's aspect ratio preset.
+    
     const queue = await fetch(QWEN_IMAGE_BASE_API_URL + '/gradio_api/call/generate_image', {
       method: "POST",
       headers: getAuthHeaders(),
@@ -144,12 +174,13 @@ export const generateImage = async (
   model: ModelOption,
   prompt: string,
   aspectRatio: AspectRatioOption,
-  seed?: number
+  seed?: number,
+  enableHD: boolean = false
 ): Promise<GeneratedImage> => {
   if (model === 'qwen-image-fast') {
-    return generateQwenImage(prompt, aspectRatio, seed);
+    return generateQwenImage(prompt, aspectRatio, seed, enableHD);
   } else {
-    return generateZImage(prompt, aspectRatio, seed);
+    return generateZImage(prompt, aspectRatio, seed, enableHD);
   }
 };
 
