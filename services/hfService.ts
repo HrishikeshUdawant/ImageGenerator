@@ -50,7 +50,7 @@ function extractCompleteEventData(sseStream: string): any | null {
         isCompleteEvent = true;
       } else if (line.substring(6).trim() === 'error') {
         isCompleteEvent = false;
-        throw new Error('Your free quota has been used up. Please set up your Hugging Face Token to get more quota.')
+        throw new Error("Your today's quota has been used up. You can set up Hugging Face Token to get more quota.")
       } else {
         isCompleteEvent = false; // Reset if it's another event type
       }
