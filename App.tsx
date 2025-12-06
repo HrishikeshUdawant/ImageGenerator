@@ -1,11 +1,13 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
-import { generateImage, optimizePrompt } from './services/hfService';
+import { generateImage, optimizePrompt, upscaler } from './services/hfService';
 import { GeneratedImage, AspectRatioOption, ModelOption } from './types';
 import { HistoryGallery } from './components/HistoryGallery';
 import { CustomSelect } from './components/CustomSelect';
 import { SettingsModal } from './components/SettingsModal';
-import { Logo } from './components/Icons'
+import { Logo, Icon4x } from './components/Icons'
+import { ImageComparison } from './components/ImageComparison';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { translations, Language } from './translations';
 import { 
@@ -28,6 +30,9 @@ import {
   Eye,
   EyeOff,
   Github,
+  X,
+  Check as CheckIcon,
+  RotateCcw,
 } from 'lucide-react';
 
 const MODEL_OPTIONS = [
@@ -66,9 +71,14 @@ export default function App() {
   const [enableHD, setEnableHD] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
+  const [isUpscaling, setIsUpscaling] = useState<boolean>(false);
   const [currentImage, setCurrentImage] = useState<GeneratedImage | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
+  // Transition state for upscaling
+  const [isComparing, setIsComparing] = useState<boolean>(false);
+  const [tempUpscaledImage, setTempUpscaledImage] = useState<string | null>(null);
   
   // Initialize history from localStorage with expiration check (delete older than 1 day)
   const [history, setHistory] = useState<GeneratedImage[]>(() => {
@@ -142,6 +152,8 @@ export default function App() {
     setError(null);
     setShowInfo(false); 
     setImageDimensions(null);
+    setIsComparing(false);
+    setTempUpscaledImage(null);
     
     const startTime = startTimer();
 
@@ -162,6 +174,63 @@ export default function App() {
       stopTimer();
       setIsLoading(false);
     }
+  };
+
+  const handleReset = () => {
+    setPrompt('');
+    setModel('z-image-turbo');
+    setAspectRatio('1:1');
+    setSeed('');
+    setEnableHD(false);
+    setCurrentImage(null);
+    setIsComparing(false);
+    setTempUpscaledImage(null);
+    setError(null);
+  };
+
+  const handleUpscale = async () => {
+    if (!currentImage || isUpscaling) return;
+
+    setIsUpscaling(true);
+    setError(null);
+    
+    try {
+        const { url: newUrl } = await upscaler(currentImage.url);
+        
+        // Don't save yet, just enter comparison mode
+        setTempUpscaledImage(newUrl);
+        setIsComparing(true);
+
+    } catch (err: any) {
+        setTempUpscaledImage(null);
+        setError(err.message || "Failed to upscale image.");
+    } finally {
+        setIsUpscaling(false);
+    }
+  };
+
+  const handleApplyUpscale = () => {
+    if (!currentImage || !tempUpscaledImage) return;
+
+    const updatedImage = { 
+        ...currentImage, 
+        url: tempUpscaledImage, 
+        isUpscaled: true 
+    };
+
+    setCurrentImage(updatedImage);
+    setHistory(prev => prev.map(img => 
+        img.id === updatedImage.id ? updatedImage : img
+    ));
+    
+    // Exit comparison mode
+    setIsComparing(false);
+    setTempUpscaledImage(null);
+  };
+
+  const handleCancelUpscale = () => {
+    setIsComparing(false);
+    setTempUpscaledImage(null);
   };
 
   const handleOptimizePrompt = async () => {
@@ -197,6 +266,8 @@ export default function App() {
     setCurrentImage(image);
     setShowInfo(false); 
     setImageDimensions(null); 
+    setIsComparing(false);
+    setTempUpscaledImage(null);
   };
 
   const handleDelete = () => {
@@ -211,6 +282,8 @@ export default function App() {
       setCurrentImage(null);
     }
     setShowInfo(false);
+    setIsComparing(false);
+    setTempUpscaledImage(null);
   };
 
   const handleToggleBlur = () => {
@@ -472,24 +545,37 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Generate Button */}
-              <button 
-                onClick={handleGenerate}
-                disabled={isWorking || !prompt.trim()}
-                className="group relative flex w-full min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-12 px-4 text-white text-lg font-bold leading-normal tracking-[0.015em] transition-all shadow-lg shadow-purple-900/40 generate-button-gradient hover:shadow-purple-700/50 disabled:opacity-70 disabled:cursor-not-allowed disabled:grayscale"
-              >
-                {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="animate-spin w-5 h-5" />
-                    <span>{t.dreaming}</span>
-                  </div>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 group-hover:animate-pulse" />
-                    <span className="truncate">{t.generate}</span>
-                  </span>
+              {/* Generate Button & Reset Button */}
+              <div className="flex items-center gap-3">
+                <button 
+                    onClick={handleGenerate}
+                    disabled={isWorking || !prompt.trim()}
+                    className="group relative flex-1 flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-12 px-4 text-white text-lg font-bold leading-normal tracking-[0.015em] transition-all shadow-lg shadow-purple-900/40 generate-button-gradient hover:shadow-purple-700/50 disabled:opacity-70 disabled:cursor-not-allowed disabled:grayscale"
+                >
+                    {isLoading ? (
+                    <div className="flex items-center gap-2">
+                        <Loader2 className="animate-spin w-5 h-5" />
+                        <span>{t.dreaming}</span>
+                    </div>
+                    ) : (
+                    <span className="flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 group-hover:animate-pulse" />
+                        <span className="truncate">{t.generate}</span>
+                    </span>
+                    )}
+                </button>
+
+                {currentImage && (
+                    <button 
+                        onClick={handleReset}
+                        title={t.reset}
+                        className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all shadow-lg active:scale-95"
+                    >
+                        <RotateCcw className="w-5 h-5" />
+                    </button>
                 )}
-              </button>
+              </div>
+
             </div>
           </aside>
 
@@ -497,7 +583,7 @@ export default function App() {
           <div className="flex-1 flex flex-col overflow-x-hidden">
             
             {/* Main Preview Area */}
-            <section className="flex-1 flex flex-col w-full min-h-[360px] max-h-[450px]">
+            <section className="flex-1 flex flex-col w-full min-h-[360px] md:max-h-[450px]">
               <div className="relative w-full flex-grow flex flex-col items-center justify-center bg-black/20 rounded-xl backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/20 overflow-hidden relative group">
                 
                 {isWorking ? (
@@ -522,36 +608,48 @@ export default function App() {
                         <p className="text-white/60">{error}</p>
                     </div>
                 ) : currentImage ? (
-                  <div className="w-full h-full flex items-center justify-center bg-black/40 animate-in zoom-in-95 duration-500">
-                     <TransformWrapper
-                        initialScale={1}
-                        minScale={1}
-                        maxScale={8}
-                        centerOnInit={true}
-                        key={currentImage.id} // Forces component reset on new image
-                        wheel={{ step: 0.5 }}
-                     >
-                       <TransformComponent 
-                          wrapperStyle={{ width: "100%", height: "100%" }}
-                          contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
-                       >
-                         <img 
-                            src={currentImage.url} 
-                            alt={currentImage.prompt} 
-                            className={`max-w-full max-h-full object-contain shadow-2xl cursor-grab active:cursor-grabbing transition-all duration-300 ${currentImage.isBlurred ? 'blur-lg scale-105' : ''}`}
-                            onContextMenu={(e) => e.preventDefault()}
-                            onLoad={(e) => {
-                                setImageDimensions({
-                                    width: e.currentTarget.naturalWidth,
-                                    height: e.currentTarget.naturalHeight
-                                });
-                            }}
-                         />
-                       </TransformComponent>
-                     </TransformWrapper>
+                  <div className="w-full h-full flex items-center justify-center bg-black/40 animate-in zoom-in-95 duration-500 relative">
+                     
+                     {/* Image View or Comparison View */}
+                     {isComparing && tempUpscaledImage ? (
+                        <div className="w-full h-full">
+                            <ImageComparison 
+                                beforeImage={currentImage.url}
+                                afterImage={tempUpscaledImage}
+                                alt={currentImage.prompt}
+                            />
+                        </div>
+                     ) : (
+                        <TransformWrapper
+                            initialScale={1}
+                            minScale={1}
+                            maxScale={8}
+                            centerOnInit={true}
+                            key={currentImage.id} // Forces component reset on new image
+                            wheel={{ step: 0.5 }}
+                        >
+                        <TransformComponent 
+                            wrapperStyle={{ width: "100%", height: "100%" }}
+                            contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        >
+                            <img 
+                                src={currentImage.url} 
+                                alt={currentImage.prompt} 
+                                className={`max-w-full max-h-full object-contain shadow-2xl cursor-grab active:cursor-grabbing transition-all duration-300 ${currentImage.isBlurred ? 'blur-lg scale-105' : ''}`}
+                                onContextMenu={(e) => e.preventDefault()}
+                                onLoad={(e) => {
+                                    setImageDimensions({
+                                        width: e.currentTarget.naturalWidth,
+                                        height: e.currentTarget.naturalHeight
+                                    });
+                                }}
+                            />
+                        </TransformComponent>
+                        </TransformWrapper>
+                     )}
                      
                      {/* Info Popover */}
-                     {showInfo && (
+                     {showInfo && !isComparing && (
                        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 w-[90%] md:w-[400px] bg-[#1A1625]/95 backdrop-blur-md border border-white/10 rounded-xl p-5 shadow-2xl text-sm text-white/80 animate-in slide-in-from-bottom-2 fade-in duration-200">
                           <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
                              <h4 className="font-medium text-white">{t.imageDetails}</h4>
@@ -569,6 +667,7 @@ export default function App() {
                                     <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">{t.dimensions}</span>
                                     <p className="text-white/90">
                                         {imageDimensions ? `${imageDimensions.width} x ${imageDimensions.height} (${currentImage.aspectRatio})` : currentImage.aspectRatio}
+                                        {currentImage.isUpscaled && <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 font-bold">HD</span>}
                                     </p>
                                 </div>
                             </div>
@@ -617,46 +716,82 @@ export default function App() {
                        </div>
                      )}
 
-                     {/* Unified Action Toolbar */}
+                     {/* Toolbar Area */}
                      <div className="absolute bottom-6 inset-x-0 flex justify-center pointer-events-none z-40">
-                         <div className="pointer-events-auto flex items-center gap-1 p-1.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 shadow-2xl transition-opacity duration-300 opacity-100 md:opacity-0 md:group-hover:opacity-100">
-                             
-                             <button
-                                onClick={() => setShowInfo(!showInfo)}
-                                title={t.details}
-                                className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${showInfo ? 'bg-purple-600 text-white shadow-lg' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
-                             >
-                                <Info className="w-5 h-5" />
-                             </button>
+                         {isComparing ? (
+                            /* Comparison Controls */
+                            <div className="pointer-events-auto flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300">
+                                <button
+                                    onClick={handleCancelUpscale}
+                                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-white/10 hover:text-white transition-all shadow-xl hover:shadow-red-900/10 hover:border-red-500/30"
+                                >
+                                    <X className="w-5 h-5 text-red-400" />
+                                    <span className="font-medium text-sm">{t.discard}</span>
+                                </button>
+                                <button
+                                    onClick={handleApplyUpscale}
+                                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-white/10 hover:text-white transition-all shadow-xl hover:shadow-purple-900/10 hover:border-purple-500/30"
+                                >
+                                    <CheckIcon className="w-5 h-5 text-purple-400" />
+                                    <span className="font-medium text-sm">{t.apply}</span>
+                                </button>
+                            </div>
+                         ) : (
+                            /* Standard Toolbar */
+                            <div className="pointer-events-auto flex items-center gap-1 p-1.5 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 shadow-2xl transition-opacity duration-300 opacity-100 md:opacity-0 md:group-hover:opacity-100">
+                                
+                                <button
+                                    onClick={() => setShowInfo(!showInfo)}
+                                    title={t.details}
+                                    className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${showInfo ? 'bg-purple-600 text-white shadow-lg' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+                                >
+                                    <Info className="w-5 h-5" />
+                                </button>
 
-                             <div className="w-px h-5 bg-white/10 mx-1"></div>
+                                <div className="w-px h-5 bg-white/10 mx-1"></div>
 
-                             <button 
-                                onClick={handleToggleBlur}
-                                title={t.toggleBlur}
-                                className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${currentImage.isBlurred ? 'text-purple-400 bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
-                             >
-                                {currentImage.isBlurred ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                             </button>
+                                <button
+                                    onClick={handleUpscale}
+                                    disabled={isUpscaling || currentImage.isUpscaled}
+                                    title={isUpscaling ? t.upscaling : t.upscale}
+                                    className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${currentImage.isUpscaled ? 'text-purple-400 bg-purple-500/10' : 'text-white/70 hover:text-purple-400 hover:bg-white/10'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                >
+                                    {isUpscaling ? (
+                                        <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+                                    ) : (
+                                        <Icon4x className="w-5 h-5 transition-colors duration-300" />
+                                    )}
+                                </button>
 
-                             <div className="w-px h-5 bg-white/10 mx-1"></div>
-                             
-                             <button 
-                                onClick={() => handleDownload(currentImage.url, `generated-${currentImage.id}`)}
-                                title={t.download}
-                                className="flex items-center justify-center w-10 h-10 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all"
-                             >
-                                <Download className="w-5 h-5" />
-                             </button>
-                             
-                             <button 
-                                onClick={handleDelete}
-                                title={t.delete}
-                                className="flex items-center justify-center w-10 h-10 rounded-xl text-white/70 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                             >
-                                <Trash2 className="w-5 h-5" />
-                             </button>
-                         </div>
+                                <div className="w-px h-5 bg-white/10 mx-1"></div>
+
+                                <button 
+                                    onClick={handleToggleBlur}
+                                    title={t.toggleBlur}
+                                    className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${currentImage.isBlurred ? 'text-purple-400 bg-white/10' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+                                >
+                                    {currentImage.isBlurred ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
+
+                                <div className="w-px h-5 bg-white/10 mx-1"></div>
+                                
+                                <button 
+                                    onClick={() => handleDownload(currentImage.url, `generated-${currentImage.id}`)}
+                                    title={t.download}
+                                    className="flex items-center justify-center w-10 h-10 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all"
+                                >
+                                    <Download className="w-5 h-5" />
+                                </button>
+                                
+                                <button 
+                                    onClick={handleDelete}
+                                    title={t.delete}
+                                    className="flex items-center justify-center w-10 h-10 rounded-xl text-white/70 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                >
+                                    <Trash2 className="w-5 h-5" />
+                                </button>
+                            </div>
+                         )}
                      </div>
                   </div>
                 ) : !isWorking && (

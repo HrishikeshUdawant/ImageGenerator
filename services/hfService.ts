@@ -2,6 +2,7 @@ import { GeneratedImage, AspectRatioOption, ModelOption } from "../types";
 
 const ZIMAGE_BASE_API_URL = "https://luca115-z-image-turbo.hf.space";
 const QWEN_IMAGE_BASE_API_URL = "https://mcp-tools-qwen-image-fast.hf.space";
+const UPSCALER_BASE_API_URL = "https://tuan2308-upscaler.hf.space";
 const POLLINATIONS_API_URL = "https://text.pollinations.ai/openai";
 
 const getZImageDimensions = (ratio: AspectRatioOption, enableHD: boolean): { width: number; height: number } => {
@@ -93,7 +94,7 @@ function extractCompleteEventData(sseStream: string): any | null {
 const generateZImage = async (
   prompt: string,
   aspectRatio: AspectRatioOption,
-  seed?: number,
+  seed: number = Math.round(Math.random() * 1000000000),
   enableHD: boolean = false
 ): Promise<GeneratedImage> => {
   let { width, height } = getZImageDimensions(aspectRatio, enableHD);
@@ -103,7 +104,7 @@ const generateZImage = async (
       method: "POST",
       headers: getAuthHeaders(),
       body: JSON.stringify({
-        data: [prompt, height, width, 8, seed || 42, seed === undefined]
+        data: [prompt, height, width, 8, seed, false]
       })
     })
     const { event_id } = await queue.json();
@@ -131,15 +132,9 @@ const generateZImage = async (
 const generateQwenImage = async (
   prompt: string,
   aspectRatio: AspectRatioOption,
-  seed?: number,
-  enableHD: boolean = false
+  seed?: number
 ): Promise<GeneratedImage> => {
-  try {
-    // Note: Qwen Image Fast via this API currently takes strict aspect ratio strings.
-    // We cannot explicitly set dimensions to 2x like we can with Z-Image.
-    // If enableHD is true, it will simply regenerate (potentially with same seed) 
-    // but the resolution remains bound by the model's aspect ratio preset.
-    
+  try {    
     const queue = await fetch(QWEN_IMAGE_BASE_API_URL + '/gradio_api/call/generate_image', {
       method: "POST",
       headers: getAuthHeaders(),
@@ -152,7 +147,6 @@ const generateQwenImage = async (
       headers: getAuthHeaders()
     });
     const result = await response.text();
-    console.log(result)
     const data = extractCompleteEventData(result);
 
     return {
@@ -178,9 +172,32 @@ export const generateImage = async (
   enableHD: boolean = false
 ): Promise<GeneratedImage> => {
   if (model === 'qwen-image-fast') {
-    return generateQwenImage(prompt, aspectRatio, seed, enableHD);
+    return generateQwenImage(prompt, aspectRatio, seed);
   } else {
     return generateZImage(prompt, aspectRatio, seed, enableHD);
+  }
+};
+
+export const upscaler = async (url: string): Promise<{ url: string }> => {
+  try {    
+    const queue = await fetch(UPSCALER_BASE_API_URL + '/gradio_api/call/realesrgan', {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        data: [{"path": url,"meta":{"_type":"gradio.FileData"}}, 'RealESRGAN_x4plus', 0.5, false, 4]
+      })
+    })
+    const { event_id } = await queue.json();
+    const response = await fetch(UPSCALER_BASE_API_URL + '/gradio_api/call/realesrgan/' + event_id, {
+      headers: getAuthHeaders()
+    });
+    const result = await response.text();
+    const data = extractCompleteEventData(result);
+
+    return { url: data[0].url };
+  } catch (error) {
+    console.error("Upscaler Error:", error);
+    throw error;
   }
 };
 

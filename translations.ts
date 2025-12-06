@@ -1,4 +1,5 @@
 
+
 export type Language = 'en' | 'zh';
 
 export const translations = {
@@ -37,6 +38,11 @@ export const translations = {
     save: "Save",
     language: "Language",
     hd: "HD",
+    upscale: "Upscale",
+    upscaling: "Upscaling...",
+    apply: "Keep Changes",
+    discard: "Discard",
+    reset: "Reset",
 
     // Aspect Ratios
     ar_square: "Default 1:1",
@@ -84,6 +90,11 @@ export const translations = {
     save: "保存",
     language: "语言",
     hd: "高清",
+    upscale: "超清放大",
+    upscaling: "放大中...",
+    apply: "保留图片",
+    discard: "取消更改",
+    reset: "重置",
 
     // Aspect Ratios
     ar_square: "默认 1:1",
