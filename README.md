@@ -2,7 +2,7 @@
 
 A sleek, dark-themed AI image generator built with React, TypeScript, and Tailwind CSS. This application leverages powerful Hugging Face models (Z-Image Turbo, Qwen Image Fast) to generate high-quality images from text prompts in seconds.
 
-![App Screenshot](https://cdn.xiangfa.org/upload/WX20251205-154822@2x.png)
+![App Screenshot](https://cdn.xiangfa.org/upload/WX20251206-170626@2x.png)
 
 ## ✨ Features
 
@@ -10,6 +10,7 @@ A sleek, dark-themed AI image generator built with React, TypeScript, and Tailwi
 - **Prompt Optimization**: Integrated AI prompt enhancer that expands simple ideas into detailed, cinematic descriptions.
 - **History Gallery**: Automatically saves generated images locally. View, zoom, pan, and manage your creation history.
 - **Interactive Viewer**: Zoom and pan capabilities for detailed image inspection.
+- **4x Resolution**: Using AI technology, any image can be upscaled 4x resolution, achieving a maximum image quality of 8K.
 - **Multilingual**: Full support for English and Chinese (中文) interfaces.
 - **Hugging Face Integration**: Optional API token support for higher rate limits.
 - **Privacy Focused**: History is stored in your browser's LocalStorage; no backend database is required for user data.
