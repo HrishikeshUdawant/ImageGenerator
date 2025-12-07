@@ -2,6 +2,7 @@ import { GeneratedImage, AspectRatioOption, ModelOption } from "../types";
 
 const ZIMAGE_BASE_API_URL = "https://luca115-z-image-turbo.hf.space";
 const QWEN_IMAGE_BASE_API_URL = "https://mcp-tools-qwen-image-fast.hf.space";
+const OVIS_IMAGE_BASE_API_URL = "https://aidc-ai-ovis-image-7b.hf.space";
 const UPSCALER_BASE_API_URL = "https://tuan2308-upscaler.hf.space";
 const POLLINATIONS_API_URL = "https://text.pollinations.ai/openai";
 
@@ -27,17 +28,17 @@ const getZImageDimensions = (ratio: AspectRatioOption, enableHD: boolean): { wid
   } else {
       switch (ratio) {
       case "16:9":
-        return { width: 1280, height: 720 };
+        return { width: 1024, height: 576 };
       case "4:3":
         return { width: 1024, height: 768 };
       case "3:2":
-        return { width: 1536, height: 1024 };
+        return { width: 960, height: 640 };
       case "9:16":
-        return { width: 720, height: 1280 };
+        return { width: 576, height: 1024 };
       case "3:4":
         return { width: 768, height: 1024 };
       case "2:3":
-        return { width: 1024, height: 1536 };
+        return { width: 640, height: 960 };
       case "1:1":
       default:
         return { width: 1024, height: 1024 };
@@ -113,7 +114,7 @@ const generateZImage = async (
       prompt,
       aspectRatio,
       timestamp: Date.now(),
-      seed: data[1]
+      seed
     };
   } catch (error) {
     console.error("Z-Image Turbo Generation Error:", error);
@@ -156,6 +157,44 @@ const generateQwenImage = async (
   }
 };
 
+const generateOvisImage = async (
+  prompt: string,
+  aspectRatio: AspectRatioOption,
+  seed: number = Math.round(Math.random() * 2147483647),
+  enableHD: boolean = false
+): Promise<GeneratedImage> => {
+  let { width, height } = getZImageDimensions(aspectRatio, enableHD);
+
+  try {
+    const queue = await fetch(OVIS_IMAGE_BASE_API_URL + '/gradio_api/call/generate', {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        data: [prompt, height, width, seed, 24, 4]
+      })
+    })
+    const { event_id } = await queue.json();
+    const response = await fetch(OVIS_IMAGE_BASE_API_URL + '/gradio_api/call/generate/' + event_id, {
+      headers: getAuthHeaders()
+    });
+    const result = await response.text();
+    const data = extractCompleteEventData(result);
+
+    return {
+      id: crypto.randomUUID(),
+      url: data[0].url,
+      model: 'ovis-image',
+      prompt,
+      aspectRatio,
+      timestamp: Date.now(),
+      seed
+    };
+  } catch (error) {
+    console.error("Ovis Image Generation Error:", error);
+    throw error;
+  }
+};
+
 export const generateImage = async (
   model: ModelOption,
   prompt: string,
@@ -165,6 +204,8 @@ export const generateImage = async (
 ): Promise<GeneratedImage> => {
   if (model === 'qwen-image-fast') {
     return generateQwenImage(prompt, aspectRatio, seed);
+  } else if (model === 'ovis-image') {
+    return generateOvisImage(prompt, aspectRatio, seed)
   } else {
     return generateZImage(prompt, aspectRatio, seed, enableHD);
   }

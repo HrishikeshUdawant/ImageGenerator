@@ -33,7 +33,7 @@ export const translations = {
     hfToken: "Hugging Face Token",
     hfTokenHelp: "Optional. Provide",
     hfTokenLink: "Access Token",
-    hfTokenHelpEnd: "to get more quota on Hugging Face.",
+    hfTokenHelpEnd: "to get more free quota.",
     cancel: "Cancel",
     save: "Save",
     language: "Language",
@@ -44,6 +44,7 @@ export const translations = {
     discard: "Discard",
     reset: "Reset",
     promptHistory: "Prompt History",
+    historyEmpty: "No history available",
 
     // Aspect Ratios
     ar_square: "Default 1:1",
@@ -84,7 +85,7 @@ export const translations = {
     hfToken: "Hugging Face 令牌",
     hfTokenHelp: "可选。提供",
     hfTokenLink: "访问令牌",
-    hfTokenHelpEnd: "以获得更多 Hugging Face 配额。",
+    hfTokenHelpEnd: "以获得更多免费配额。",
     cancel: "取消",
     save: "保存",
     language: "语言",
@@ -95,6 +96,7 @@ export const translations = {
     discard: "取消更改",
     reset: "重置",
     promptHistory: "历史提示词",
+    historyEmpty: "暂无历史记录",
 
     // Aspect Ratios
     ar_square: "默认 1:1",

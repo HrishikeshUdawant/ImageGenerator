@@ -36,7 +36,8 @@ import {
 
 const MODEL_OPTIONS = [
   { value: 'z-image-turbo', label: 'Z-Image Turbo' },
-  { value: 'qwen-image-fast', label: 'Qwen Image Fast' }
+  { value: 'qwen-image-fast', label: 'Qwen Image Fast' },
+  { value: 'ovis-image', label: 'Ovis Image' }
 ];
 
 export default function App() {
@@ -482,64 +483,68 @@ export default function App() {
                 {/* Prompt Input */}
                 <div className="group flex flex-col flex-1">
                     <div className="flex items-center justify-between pb-3">
-                        <label htmlFor="prompt-input" className="text-white text-lg font-medium leading-normal group-focus-within:text-purple-400 transition-colors cursor-pointer">{t.prompt}</label>
-                        
                         <div className="flex items-center gap-2">
-                            {/* History Prompt Button */}
-                            {promptHistory.length > 0 && (
-                                <div className="relative animate-in fade-in zoom-in-0 duration-300" ref={promptHistoryRef}>
-                                    <button
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            setShowPromptHistory(!showPromptHistory);
-                                        }}
-                                        className={`flex items-center justify-center h-7 w-7 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10 ${showPromptHistory ? 'text-purple-400 bg-white/10 border-white/10' : ''}`}
-                                        title={t.promptHistory}
-                                        type="button"
-                                    >
-                                        <History className="w-4 h-4" />
-                                    </button>
-                                    
-                                    {/* History Dropdown */}
-                                    {showPromptHistory && (
-                                        <div className="absolute right-0 top-full mt-2 w-72 max-h-[300px] overflow-y-auto custom-scrollbar rounded-xl bg-[#1A1625] border border-white/10 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100 flex flex-col">
-                                            <div className="p-1">
-                                                {promptHistory.map((historyPrompt, index) => (
-                                                    <button
-                                                        key={index}
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            setPrompt(historyPrompt);
-                                                            setShowPromptHistory(false);
-                                                        }}
-                                                        className="w-full text-left p-3 text-sm text-white/80 hover:bg-white/10 rounded-lg transition-colors group border-b border-white/5 last:border-0 last:border-b-0"
-                                                        type="button"
-                                                    >
-                                                        <p className="line-clamp-4 text-xs leading-relaxed opacity-80 group-hover:opacity-100 break-words">{historyPrompt}</p>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                          <label htmlFor="prompt-input" className="text-white text-lg font-medium leading-normal group-focus-within:text-purple-400 transition-colors cursor-pointer">{t.prompt}</label>
 
-                            <button
-                                onClick={handleOptimizePrompt}
-                                disabled={isOptimizing || !prompt.trim()}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white/60 bg-white/5 hover:bg-white/10 hover:text-purple-300 rounded-lg transition-all border border-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title={t.optimizeTitle}
-                                type="button"
-                            >
-                                {isOptimizing ? (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                    <Wand2 className="w-3.5 h-3.5" />
-                                )}
-                                {isOptimizing ? t.optimizing : t.optimize}
-                            </button>
+                          {/* History Prompt Button */}
+                          <div className="relative" ref={promptHistoryRef}>
+                              <button
+                                  onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setShowPromptHistory(!showPromptHistory);
+                                  }}
+                                  className={`flex items-center justify-center h-7 w-7 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all border border-transparent hover:border-white/10 animate-in fade-in zoom-in-0 duration-300 ${showPromptHistory ? 'text-purple-400 bg-white/10 border-white/10' : ''}`}
+                                  title={t.promptHistory}
+                                  type="button"
+                              >
+                                  <History className="w-4 h-4" />
+                              </button>
+                              
+                              {/* History Dropdown */}
+                              {showPromptHistory && (
+                                  <div className="absolute left-0 top-full mt-2 w-72 max-h-[300px] overflow-y-auto custom-scrollbar rounded-xl bg-[#1A1625] border border-white/10 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100 flex flex-col">
+                                      <div className="p-1">
+                                          {promptHistory.length === 0 ? (
+                                              <div className="p-4 text-center text-white/40 text-sm italic">
+                                                  {t.historyEmpty}
+                                              </div>
+                                          ) : (
+                                              promptHistory.map((historyPrompt, index) => (
+                                                  <button
+                                                      key={index}
+                                                      onClick={(e) => {
+                                                          e.preventDefault();
+                                                          setPrompt(historyPrompt);
+                                                          setShowPromptHistory(false);
+                                                      }}
+                                                      className="w-full text-left p-3 text-sm text-white/80 hover:bg-white/10 rounded-lg transition-colors group border-b border-white/5 last:border-0 last:border-b-0"
+                                                      type="button"
+                                                  >
+                                                      <p className="line-clamp-4 text-xs leading-relaxed opacity-80 group-hover:opacity-100 break-words">{historyPrompt}</p>
+                                                  </button>
+                                              ))
+                                          )}
+                                      </div>
+                                  </div>
+                              )}
+                          </div>
                         </div>
+
+                        <button
+                            onClick={handleOptimizePrompt}
+                            disabled={isOptimizing || !prompt.trim()}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white/60 bg-white/5 hover:bg-white/10 hover:text-purple-300 rounded-lg transition-all border border-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={t.optimizeTitle}
+                            type="button"
+                        >
+                            {isOptimizing ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                                <Wand2 className="w-3.5 h-3.5" />
+                            )}
+                            {isOptimizing ? t.optimizing : t.optimize}
+                        </button>
                     </div>
                     <textarea 
                       id="prompt-input"

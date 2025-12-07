@@ -15,7 +15,7 @@ export interface GeneratedImage {
 
 export type AspectRatioOption = "1:1" | "3:2" | "2:3" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9";
 
-export type ModelOption = "qwen-image-fast" | "z-image-turbo";
+export type ModelOption = "z-image-turbo" | "qwen-image-fast" | "ovis-image";
 
 export interface GenerationParams {
     model: ModelOption;
