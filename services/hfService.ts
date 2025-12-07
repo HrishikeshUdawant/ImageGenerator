@@ -6,6 +6,125 @@ const OVIS_IMAGE_BASE_API_URL = "https://aidc-ai-ovis-image-7b.hf.space";
 const UPSCALER_BASE_API_URL = "https://tuan2308-upscaler.hf.space";
 const POLLINATIONS_API_URL = "https://text.pollinations.ai/openai";
 
+// --- Token Management System ---
+
+const TOKEN_STORAGE_KEY = 'huggingFaceToken';
+const TOKEN_STATUS_KEY = 'hf_token_status';
+const QUOTA_ERROR_MSG = "Your today's quota has been used up. You can set up Hugging Face Token to get more quota.";
+
+interface TokenStatusStore {
+  date: string; // YYYY-MM-DD
+  exhausted: Record<string, boolean>;
+}
+
+const getUTCDatesString = () => new Date().toISOString().split('T')[0];
+
+const getTokenStatusStore = (): TokenStatusStore => {
+  const defaultStore = { date: getUTCDatesString(), exhausted: {} };
+  if (typeof localStorage === 'undefined') return defaultStore;
+  
+  try {
+    const raw = localStorage.getItem(TOKEN_STATUS_KEY);
+    if (!raw) return defaultStore;
+    const store = JSON.parse(raw);
+    // Reset if it's a new day (UTC)
+    if (store.date !== getUTCDatesString()) {
+      return defaultStore; 
+    }
+    return store;
+  } catch {
+    return defaultStore;
+  }
+};
+
+const saveTokenStatusStore = (store: TokenStatusStore) => {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(TOKEN_STATUS_KEY, JSON.stringify(store));
+  }
+};
+
+export const getTokens = (rawInput?: string | null): string[] => {
+  const input = rawInput !== undefined ? rawInput : (typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_STORAGE_KEY) : '');
+  if (!input) return [];
+  return input.split(',').map(t => t.trim()).filter(t => t.length > 0);
+};
+
+export const getTokenStats = (rawInput: string) => {
+  const tokens = getTokens(rawInput);
+  const store = getTokenStatusStore();
+  const total = tokens.length;
+  // A token is exhausted only if it's in the store's exhausted list for today
+  const exhausted = tokens.filter(t => store.exhausted[t]).length;
+  return {
+    total,
+    exhausted,
+    active: total - exhausted
+  };
+};
+
+const getNextAvailableToken = (): string | null => {
+  const tokens = getTokens();
+  const store = getTokenStatusStore();
+  // Return the first token that is NOT marked as exhausted
+  return tokens.find(t => !store.exhausted[t]) || null;
+};
+
+const markTokenExhausted = (token: string) => {
+  const store = getTokenStatusStore();
+  store.exhausted[token] = true;
+  saveTokenStatusStore(store);
+};
+
+// --- API Execution Wrapper ---
+
+const runWithTokenRetry = async <T>(operation: (token: string | null) => Promise<T>): Promise<T> => {
+  const tokens = getTokens();
+  
+  // If no tokens configured, run once with no token (public quota)
+  if (tokens.length === 0) {
+      return operation(null);
+  }
+
+  let lastError: any;
+  let attempts = 0;
+  // Limit loops to number of tokens
+  const maxAttempts = tokens.length + 1; 
+
+  while (attempts < maxAttempts) {
+    attempts++;
+    const token = getNextAvailableToken();
+    
+    // If we have tokens configured but all are exhausted
+    if (!token) {
+       throw new Error("All configured Hugging Face tokens have exhausted their daily quota.");
+    }
+
+    try {
+      return await operation(token);
+    } catch (error: any) {
+      lastError = error;
+      
+      const isQuotaError = 
+        error.message === QUOTA_ERROR_MSG || 
+        error.message?.includes("429") ||
+        error.status === 429;
+
+      if (isQuotaError && token) {
+        console.warn(`Token ${token.substring(0, 8)}... exhausted. Switching to next token.`);
+        markTokenExhausted(token);
+        continue; // Retry loop with next token
+      }
+
+      // If it's not a quota error, or we are not using a token, rethrow immediately
+      throw error;
+    }
+  }
+  
+  throw lastError || new Error("Failed to generate image with available tokens.");
+};
+
+// --- Service Logic ---
+
 const getZImageDimensions = (ratio: AspectRatioOption, enableHD: boolean): { width: number; height: number } => {
   if (enableHD) {
     switch (ratio) {
@@ -46,8 +165,7 @@ const getZImageDimensions = (ratio: AspectRatioOption, enableHD: boolean): { wid
   }
 };
 
-const getAuthHeaders = (): Record<string, string> => {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('huggingFaceToken') : null;
+const getAuthHeaders = (token: string | null): Record<string, string> => {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -67,7 +185,7 @@ function extractCompleteEventData(sseStream: string): any | null {
         isCompleteEvent = true;
       } else if (line.substring(6).trim() === 'error') {
         isCompleteEvent = false;
-        throw new Error("Your today's quota has been used up. You can set up Hugging Face Token to get more quota.")
+        throw new Error(QUOTA_ERROR_MSG);
       } else {
         isCompleteEvent = false; // Reset if it's another event type
       }
@@ -92,34 +210,36 @@ const generateZImage = async (
 ): Promise<GeneratedImage> => {
   let { width, height } = getZImageDimensions(aspectRatio, enableHD);
 
-  try {
-    const queue = await fetch(ZIMAGE_BASE_API_URL + '/gradio_api/call/generate_image', {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        data: [prompt, height, width, 8, seed, false]
-      })
-    })
-    const { event_id } = await queue.json();
-    const response = await fetch(ZIMAGE_BASE_API_URL + '/gradio_api/call/generate_image/' + event_id, {
-      headers: getAuthHeaders()
-    });
-    const result = await response.text();
-    const data = extractCompleteEventData(result);
+  return runWithTokenRetry(async (token) => {
+    try {
+        const queue = await fetch(ZIMAGE_BASE_API_URL + '/gradio_api/call/generate_image', {
+        method: "POST",
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({
+            data: [prompt, height, width, 8, seed, false]
+        })
+        });
+        const { event_id } = await queue.json();
+        const response = await fetch(ZIMAGE_BASE_API_URL + '/gradio_api/call/generate_image/' + event_id, {
+        headers: getAuthHeaders(token)
+        });
+        const result = await response.text();
+        const data = extractCompleteEventData(result);
 
-    return {
-      id: crypto.randomUUID(),
-      url: data[0].url,
-      model: 'z-image-turbo',
-      prompt,
-      aspectRatio,
-      timestamp: Date.now(),
-      seed
-    };
-  } catch (error) {
-    console.error("Z-Image Turbo Generation Error:", error);
-    throw error;
-  }
+        return {
+        id: crypto.randomUUID(),
+        url: data[0].url,
+        model: 'z-image-turbo',
+        prompt,
+        aspectRatio,
+        timestamp: Date.now(),
+        seed
+        };
+    } catch (error) {
+        console.error("Z-Image Turbo Generation Error:", error);
+        throw error;
+    }
+  });
 };
 
 const generateQwenImage = async (
@@ -127,34 +247,36 @@ const generateQwenImage = async (
   aspectRatio: AspectRatioOption,
   seed?: number
 ): Promise<GeneratedImage> => {
-  try {    
-    const queue = await fetch(QWEN_IMAGE_BASE_API_URL + '/gradio_api/call/generate_image', {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        data: [prompt, seed || 42, seed === undefined, aspectRatio, 3, 8]
-      })
-    })
-    const { event_id } = await queue.json();
-    const response = await fetch(QWEN_IMAGE_BASE_API_URL + '/gradio_api/call/generate_image/' + event_id, {
-      headers: getAuthHeaders()
-    });
-    const result = await response.text();
-    const data = extractCompleteEventData(result);
+  return runWithTokenRetry(async (token) => {
+    try {    
+        const queue = await fetch(QWEN_IMAGE_BASE_API_URL + '/gradio_api/call/generate_image', {
+        method: "POST",
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({
+            data: [prompt, seed || 42, seed === undefined, aspectRatio, 3, 8]
+        })
+        });
+        const { event_id } = await queue.json();
+        const response = await fetch(QWEN_IMAGE_BASE_API_URL + '/gradio_api/call/generate_image/' + event_id, {
+        headers: getAuthHeaders(token)
+        });
+        const result = await response.text();
+        const data = extractCompleteEventData(result);
 
-    return {
-      id: crypto.randomUUID(),
-      url: data[0].url,
-      model: 'qwen-image-fast',
-      prompt,
-      aspectRatio,
-      timestamp: Date.now(),
-      seed: parseInt(data[1].replace('Seed used for generation: ', ''))
-    };
-  } catch (error) {
-    console.error("Qwen Image Fast Generation Error:", error);
-    throw error;
-  }
+        return {
+        id: crypto.randomUUID(),
+        url: data[0].url,
+        model: 'qwen-image-fast',
+        prompt,
+        aspectRatio,
+        timestamp: Date.now(),
+        seed: parseInt(data[1].replace('Seed used for generation: ', ''))
+        };
+    } catch (error) {
+        console.error("Qwen Image Fast Generation Error:", error);
+        throw error;
+    }
+  });
 };
 
 const generateOvisImage = async (
@@ -165,34 +287,36 @@ const generateOvisImage = async (
 ): Promise<GeneratedImage> => {
   let { width, height } = getZImageDimensions(aspectRatio, enableHD);
 
-  try {
-    const queue = await fetch(OVIS_IMAGE_BASE_API_URL + '/gradio_api/call/generate', {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        data: [prompt, height, width, seed, 24, 4]
-      })
-    })
-    const { event_id } = await queue.json();
-    const response = await fetch(OVIS_IMAGE_BASE_API_URL + '/gradio_api/call/generate/' + event_id, {
-      headers: getAuthHeaders()
-    });
-    const result = await response.text();
-    const data = extractCompleteEventData(result);
+  return runWithTokenRetry(async (token) => {
+    try {
+        const queue = await fetch(OVIS_IMAGE_BASE_API_URL + '/gradio_api/call/generate', {
+        method: "POST",
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({
+            data: [prompt, height, width, seed, 24, 4]
+        })
+        });
+        const { event_id } = await queue.json();
+        const response = await fetch(OVIS_IMAGE_BASE_API_URL + '/gradio_api/call/generate/' + event_id, {
+        headers: getAuthHeaders(token)
+        });
+        const result = await response.text();
+        const data = extractCompleteEventData(result);
 
-    return {
-      id: crypto.randomUUID(),
-      url: data[0].url,
-      model: 'ovis-image',
-      prompt,
-      aspectRatio,
-      timestamp: Date.now(),
-      seed
-    };
-  } catch (error) {
-    console.error("Ovis Image Generation Error:", error);
-    throw error;
-  }
+        return {
+        id: crypto.randomUUID(),
+        url: data[0].url,
+        model: 'ovis-image',
+        prompt,
+        aspectRatio,
+        timestamp: Date.now(),
+        seed
+        };
+    } catch (error) {
+        console.error("Ovis Image Generation Error:", error);
+        throw error;
+    }
+  });
 };
 
 export const generateImage = async (
@@ -212,26 +336,28 @@ export const generateImage = async (
 };
 
 export const upscaler = async (url: string): Promise<{ url: string }> => {
-  try {    
-    const queue = await fetch(UPSCALER_BASE_API_URL + '/gradio_api/call/realesrgan', {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        data: [{"path": url,"meta":{"_type":"gradio.FileData"}}, 'RealESRGAN_x4plus', 0.5, false, 4]
-      })
-    })
-    const { event_id } = await queue.json();
-    const response = await fetch(UPSCALER_BASE_API_URL + '/gradio_api/call/realesrgan/' + event_id, {
-      headers: getAuthHeaders()
-    });
-    const result = await response.text();
-    const data = extractCompleteEventData(result);
+  return runWithTokenRetry(async (token) => {
+    try {    
+        const queue = await fetch(UPSCALER_BASE_API_URL + '/gradio_api/call/realesrgan', {
+        method: "POST",
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({
+            data: [{"path": url,"meta":{"_type":"gradio.FileData"}}, 'RealESRGAN_x4plus', 0.5, false, 4]
+        })
+        });
+        const { event_id } = await queue.json();
+        const response = await fetch(UPSCALER_BASE_API_URL + '/gradio_api/call/realesrgan/' + event_id, {
+        headers: getAuthHeaders(token)
+        });
+        const result = await response.text();
+        const data = extractCompleteEventData(result);
 
-    return { url: data[0].url };
-  } catch (error) {
-    console.error("Upscaler Error:", error);
-    throw error;
-  }
+        return { url: data[0].url };
+    } catch (error) {
+        console.error("Upscaler Error:", error);
+        throw error;
+    }
+  });
 };
 
 export const optimizePrompt = async (originalPrompt: string): Promise<string> => {

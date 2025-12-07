@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Save, Key, Languages } from 'lucide-react';
+import { X, Save, Key, Languages, ShieldCheck, ShieldAlert, Database, Eye, EyeOff } from 'lucide-react';
 import { Language } from '../translations';
+import { getTokenStats } from '../services/hfService';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -13,12 +14,39 @@ interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, lang, setLang, t }) => {
     const [token, setToken] = useState('');
+    const [stats, setStats] = useState({ total: 0, active: 0, exhausted: 0 });
+    const [showToken, setShowToken] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
-            setToken(localStorage.getItem('huggingFaceToken') || '');
+            const storedToken = localStorage.getItem('huggingFaceToken') || '';
+            setToken(storedToken);
+            setStats(getTokenStats(storedToken));
         }
     }, [isOpen]);
+
+    const handleTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newVal = e.target.value;
+        setToken(newVal);
+        setStats(getTokenStats(newVal));
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+        const text = e.clipboardData.getData('text');
+        // If pasted text contains newlines, normalize them to commas
+        if (text.includes('\n') || text.includes('\r')) {
+            e.preventDefault();
+            const normalized = text.split(/[\r\n]+/).map(t => t.trim()).filter(Boolean).join(',');
+            
+            const input = e.currentTarget;
+            const start = input.selectionStart ?? token.length;
+            const end = input.selectionEnd ?? token.length;
+            
+            const newValue = token.substring(0, start) + normalized + token.substring(end);
+            setToken(newValue);
+            setStats(getTokenStats(newValue));
+        }
+    };
 
     const handleSave = () => {
         localStorage.setItem('huggingFaceToken', token.trim());
@@ -80,16 +108,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
                         <label className="block text-sm font-medium text-white/90 mb-2">
                             {t.hfToken}
                         </label>
-                         <div className="relative">
+                         <div className="relative group">
                             <input
-                                type="password"
+                                type={showToken ? "text" : "password"}
                                 value={token}
-                                onChange={(e) => setToken(e.target.value)}
-                                placeholder="hf_..."
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all font-mono text-sm"
+                                onChange={handleTokenChange}
+                                onPaste={handlePaste}
+                                placeholder="hf_..., hf_..."
+                                className="w-full pl-4 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all font-mono text-sm"
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowToken(!showToken)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors p-1"
+                            >
+                                {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
                         </div>
-                        <p className="mt-2 text-xs text-white/40 leading-relaxed">
+                        
+                        {/* Token Stats - Only show if more than 1 key */}
+                        {stats.total > 1 && (
+                            <div className="mt-3 grid grid-cols-3 gap-2 animate-in fade-in duration-300">
+                                <div className="bg-white/5 rounded-lg p-2 border border-white/5 flex flex-col items-center">
+                                    <span className="text-[10px] uppercase text-white/40 font-bold tracking-wider">{t.tokenTotal}</span>
+                                    <div className="flex items-center gap-1.5 text-white/90 font-mono text-sm">
+                                        <Database className="w-3.5 h-3.5" />
+                                        {stats.total}
+                                    </div>
+                                </div>
+                                <div className="bg-green-500/10 rounded-lg p-2 border border-green-500/10 flex flex-col items-center">
+                                    <span className="text-[10px] uppercase text-green-400/60 font-bold tracking-wider">{t.tokenActive}</span>
+                                    <div className="flex items-center gap-1.5 text-green-400 font-mono text-sm">
+                                        <ShieldCheck className="w-3.5 h-3.5" />
+                                        {stats.active}
+                                    </div>
+                                </div>
+                                <div className="bg-red-500/10 rounded-lg p-2 border border-red-500/10 flex flex-col items-center">
+                                    <span className="text-[10px] uppercase text-red-400/60 font-bold tracking-wider">{t.tokenExhausted}</span>
+                                    <div className="flex items-center gap-1.5 text-red-400 font-mono text-sm">
+                                        <ShieldAlert className="w-3.5 h-3.5" />
+                                        {stats.exhausted}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <p className="mt-3 text-xs text-white/40 leading-relaxed">
                             {t.hfTokenHelp} <a className="text-purple-600 hover:text-purple-400 underline decoration-purple-600/30" href="https://huggingface.co/settings/tokens" target="_blank">{t.hfTokenLink}</a> {t.hfTokenHelpEnd}
                         </p>
                     </div>
