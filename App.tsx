@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { generateImage, optimizePrompt, upscaler } from './services/hfService';
-import { GeneratedImage, AspectRatioOption, ModelOption } from './types';
+import { generateGiteeImage, optimizePromptGitee } from './services/giteeService';
+import { GeneratedImage, AspectRatioOption, ModelOption, ProviderOption } from './types';
 import { HistoryGallery } from './components/HistoryGallery';
 import { CustomSelect } from './components/CustomSelect';
 import { SettingsModal } from './components/SettingsModal';
@@ -36,13 +36,38 @@ import {
   RotateCcw,
   History,
   CircleHelp,
+  Server,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
-const MODEL_OPTIONS = [
+const HF_MODEL_OPTIONS = [
   { value: 'z-image-turbo', label: 'Z-Image Turbo' },
   { value: 'qwen-image-fast', label: 'Qwen Image Fast' },
   { value: 'ovis-image', label: 'Ovis Image' }
 ];
+
+const GITEE_MODEL_OPTIONS = [
+  { value: 'z-image-turbo', label: 'Z-Image Turbo' },
+  { value: 'Qwen-Image', label: 'Qwen Image' }
+];
+
+const PROVIDER_OPTIONS = [
+    { value: 'huggingface', label: 'Hugging Face' },
+    { value: 'gitee', label: 'Gitee AI' }
+];
+
+const getModelConfig = (provider: ProviderOption, model: ModelOption) => {
+  if (provider === 'gitee') {
+    if (model === 'z-image-turbo') return { min: 1, max: 20, default: 9 };
+    if (model === 'Qwen-Image') return { min: 4, max: 50, default: 24 };
+  } else {
+    if (model === 'z-image-turbo') return { min: 1, max: 20, default: 9 };
+    if (model === 'qwen-image-fast') return { min: 4, max: 28, default: 8 };
+    if (model === 'ovis-image') return { min: 1, max: 100, default: 24 };
+  }
+  return { min: 1, max: 20, default: 9 }; // fallback
+}
 
 export default function App() {
   // Language Initialization
@@ -67,9 +92,11 @@ export default function App() {
   ];
 
   const [prompt, setPrompt] = useState<string>('');
+  const [provider, setProvider] = useState<ProviderOption>('huggingface');
   const [model, setModel] = useState<ModelOption>('z-image-turbo');
   const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>('1:1');
   const [seed, setSeed] = useState<string>(''); 
+  const [steps, setSteps] = useState<number>(9);
   const [enableHD, setEnableHD] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
@@ -79,6 +106,8 @@ export default function App() {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+
   // Prompt History State
   const [promptHistory, setPromptHistory] = useState<string[]>(() => {
     try {
@@ -141,6 +170,12 @@ export default function App() {
     sessionStorage.setItem('prompt_history', JSON.stringify(promptHistory));
   }, [promptHistory]);
 
+  // Update steps when model/provider changes
+  useEffect(() => {
+      const config = getModelConfig(provider, model);
+      setSteps(config.default);
+  }, [provider, model]);
+
   // Close prompt history on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -165,6 +200,18 @@ export default function App() {
         if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
+
+  // Handle Provider Change
+  const handleProviderChange = (newProvider: string) => {
+      const p = newProvider as ProviderOption;
+      setProvider(p);
+      // Reset model to first option of the new provider to avoid mismatch
+      if (p === 'gitee') {
+          setModel(GITEE_MODEL_OPTIONS[0].value as ModelOption);
+      } else {
+          setModel(HF_MODEL_OPTIONS[0].value as ModelOption);
+      }
+  };
 
   const startTimer = () => {
     setElapsedTime(0);
@@ -205,17 +252,25 @@ export default function App() {
 
     try {
       const seedNumber = seed.trim() === '' ? undefined : parseInt(seed, 10);
-      const result = await generateImage(model, prompt, aspectRatio, seedNumber, enableHD);
+      let result;
+
+      if (provider === 'gitee') {
+         result = await generateGiteeImage(model, prompt, aspectRatio, seedNumber, steps, enableHD);
+      } else {
+         result = await generateImage(model, prompt, aspectRatio, seedNumber, enableHD, steps);
+      }
       
       const endTime = Date.now();
       const duration = (endTime - startTime) / 1000;
       
-      const newImage = { ...result, duration };
+      const newImage = { ...result, duration, provider };
       
       setCurrentImage(newImage);
       setHistory(prev => [newImage, ...prev]);
     } catch (err: any) {
-      setError(err.message || "Failed to generate image. Please try again.");
+      // Translate error message if key exists, otherwise use raw message
+      const errorMessage = (t as any)[err.message] || err.message || t.generationFailed;
+      setError(errorMessage);
     } finally {
       stopTimer();
       setIsLoading(false);
@@ -224,9 +279,16 @@ export default function App() {
 
   const handleReset = () => {
     setPrompt('');
-    setModel('z-image-turbo');
+    // Keep provider as is
+    if (provider === 'gitee') {
+        setModel(GITEE_MODEL_OPTIONS[0].value as ModelOption);
+    } else {
+        setModel(HF_MODEL_OPTIONS[0].value as ModelOption);
+    }
     setAspectRatio('1:1');
     setSeed('');
+    const config = getModelConfig(provider, model);
+    setSteps(config.default);
     setEnableHD(false);
     setCurrentImage(null);
     setIsComparing(false);
@@ -249,7 +311,8 @@ export default function App() {
 
     } catch (err: any) {
         setTempUpscaledImage(null);
-        setError(err.message || "Failed to upscale image.");
+        const errorMessage = (t as any)[err.message] || err.message || t.error_upscale_failed;
+        setError(errorMessage);
     } finally {
         setIsUpscaling(false);
     }
@@ -287,11 +350,17 @@ export default function App() {
     setIsOptimizing(true);
     setError(null);
     try {
-        const optimized = await optimizePrompt(prompt);
+        let optimized = '';
+        if (provider === 'gitee') {
+             optimized = await optimizePromptGitee(prompt);
+        } else {
+             optimized = await optimizePrompt(prompt);
+        }
         setPrompt(optimized);
     } catch (err: any) {
         console.error("Optimization failed", err);
-        setError("Failed to optimize prompt. Please try again.");
+        const errorMessage = (t as any)[err.message] || err.message || t.error_prompt_optimization_failed;
+        setError(errorMessage);
     } finally {
         setIsOptimizing(false);
     }
@@ -471,11 +540,13 @@ export default function App() {
   };
 
   const getModelLabel = (modelValue: string) => {
-      const option = MODEL_OPTIONS.find(o => o.value === modelValue);
+      const option = [...HF_MODEL_OPTIONS, ...GITEE_MODEL_OPTIONS].find(o => o.value === modelValue);
       return option ? option.label : modelValue;
   };
 
   const isWorking = isLoading;
+  const currentModelOptions = provider === 'gitee' ? GITEE_MODEL_OPTIONS : HF_MODEL_OPTIONS;
+  const currentModelConfig = getModelConfig(provider, model);
 
   return (
     <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden bg-gradient-brilliant">
@@ -600,19 +671,28 @@ export default function App() {
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                       disabled={isOptimizing}
-                      className="form-input flex w-full min-w-0 flex-1 resize-none rounded-lg text-white/90 focus:outline-0 focus:ring-2 focus:ring-purple-500/50 border border-white/10 bg-white/5 focus:border-purple-500 min-h-36 placeholder:text-white/30 p-4 text-base font-normal leading-normal transition-all disabled:opacity-50 disabled:cursor-not-allowed" 
+                      className="form-input flex w-full min-w-0 flex-1 resize-none rounded-lg text-white/90 focus:outline-0 focus:ring-2 focus:ring-purple-500/50 border border-white/10 bg-white/5 focus:border-purple-500 min-h-32 placeholder:text-white/30 p-4 text-base font-normal leading-normal transition-all disabled:opacity-50 disabled:cursor-not-allowed" 
                       placeholder={t.promptPlaceholder}
                     />
                 </div>
 
                 {/* Parameters */}
                 <div className="space-y-6">
+                  {/* Provider Selection */}
+                  <CustomSelect
+                    label={t.provider}
+                    value={provider}
+                    onChange={handleProviderChange}
+                    options={PROVIDER_OPTIONS}
+                    icon={<Server className="w-5 h-5" />}
+                  />
+
                   {/* Model Selection */}
                   <CustomSelect
                     label={t.model}
                     value={model}
                     onChange={(val) => setModel(val as ModelOption)}
-                    options={MODEL_OPTIONS}
+                    options={currentModelOptions}
                     icon={<Cpu className="w-5 h-5" />}
                     headerContent={
                         model === 'z-image-turbo' && (
@@ -640,46 +720,86 @@ export default function App() {
                     onChange={(val) => setAspectRatio(val as AspectRatioOption)}
                     options={aspectRatioOptions}
                   />
+                  
+                  {/* Advanced Settings */}
+                  <div className="border-t border-white/5 pt-4">
+                     <button 
+                        type="button"
+                        onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                        className="flex items-center justify-between w-full text-left text-white/60 hover:text-purple-400 transition-colors group"
+                     >
+                        <span className="text-sm font-medium flex items-center gap-2">
+                           <Settings className="w-4 h-4 group-hover:rotate-45 transition-transform duration-300" />
+                           {t.advancedSettings}
+                        </span>
+                        {isAdvancedOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                     </button>
 
-                  {/* Seed */}
-                  <div className="group">
-                    <div className="flex items-center justify-between pb-3">
-                      <p className="text-white text-lg font-medium leading-normal group-focus-within:text-purple-400 transition-colors">{t.seed}</p>
-                      <span className="text-white/50 text-sm">{t.seedOptional}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex flex-1 items-center rounded-lg border border-white/10 bg-white/5 focus-within:ring-2 focus-within:ring-purple-500/50 focus-within:border-purple-500 transition-all h-12 overflow-hidden">
-                        <button 
-                            onClick={() => handleAdjustSeed(-1)}
-                            className="h-full px-3 text-white/40 hover:text-white hover:bg-white/5 transition-colors border-r border-white/5"
-                        >
-                            <Minus className="w-4 h-4" />
-                        </button>
-                        <input 
-                            type="number"
-                            value={seed}
-                            onChange={(e) => setSeed(e.target.value)}
-                            className="form-input flex-1 h-full bg-transparent border-none text-white/90 focus:ring-0 placeholder:text-white/30 px-2 text-sm font-medium text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
-                            placeholder={t.seedPlaceholder}
-                        />
-                        <button 
-                            onClick={() => handleAdjustSeed(1)}
-                            className="h-full px-3 text-white/40 hover:text-white hover:bg-white/5 transition-colors border-l border-white/5"
-                        >
-                            <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
-                      
-                      <Tooltip content={t.seedPlaceholder}>
-                          <button 
-                            onClick={handleRandomizeSeed}
-                            className="flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors active:scale-95"
-                          >
-                            <Dices className="w-5 h-5" />
-                          </button>
-                      </Tooltip>
-                    </div>
+                     <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isAdvancedOpen ? 'grid-rows-[1fr] mt-4' : 'grid-rows-[0fr]'}`}>
+                        <div className="overflow-hidden">
+                           <div className="space-y-5">
+                               {/* Steps */}
+                               <div className="group">
+                                   <div className="flex items-center justify-between pb-2">
+                                       <p className="text-white/80 text-sm font-medium">{t.steps}</p>
+                                       <span className="text-white/50 text-xs bg-white/5 px-2 py-0.5 rounded font-mono">{steps}</span>
+                                   </div>
+                                   <div className="flex items-center gap-3">
+                                       <input 
+                                           type="range"
+                                           min={currentModelConfig.min}
+                                           max={currentModelConfig.max}
+                                           value={steps}
+                                           onChange={(e) => setSteps(Number(e.target.value))}
+                                           className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                                       />
+                                   </div>
+                               </div>
+
+                               {/* Seed */}
+                               <div className="group">
+                                    <div className="flex items-center justify-between pb-2">
+                                    <p className="text-white/80 text-sm font-medium">{t.seed}</p>
+                                    <span className="text-white/40 text-xs">{t.seedOptional}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-1 items-center rounded-lg border border-white/10 bg-white/5 focus-within:ring-2 focus-within:ring-purple-500/50 focus-within:border-purple-500 transition-all h-10 overflow-hidden">
+                                        <button 
+                                            onClick={() => handleAdjustSeed(-1)}
+                                            className="h-full px-2 text-white/40 hover:text-white hover:bg-white/5 transition-colors border-r border-white/5"
+                                        >
+                                            <Minus className="w-3.5 h-3.5" />
+                                        </button>
+                                        <input 
+                                            type="number"
+                                            value={seed}
+                                            onChange={(e) => setSeed(e.target.value)}
+                                            className="form-input flex-1 h-full bg-transparent border-none text-white/90 focus:ring-0 placeholder:text-white/30 px-2 text-xs font-mono text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                                            placeholder={t.seedPlaceholder}
+                                        />
+                                        <button 
+                                            onClick={() => handleAdjustSeed(1)}
+                                            className="h-full px-2 text-white/40 hover:text-white hover:bg-white/5 transition-colors border-l border-white/5"
+                                        >
+                                            <Plus className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                    
+                                    <Tooltip content={t.seedPlaceholder}>
+                                        <button 
+                                            onClick={handleRandomizeSeed}
+                                            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-colors active:scale-95"
+                                        >
+                                            <Dices className="w-4 h-4" />
+                                        </button>
+                                    </Tooltip>
+                                    </div>
+                               </div>
+                           </div>
+                        </div>
+                     </div>
                   </div>
+
                 </div>
               </div>
 
@@ -722,7 +842,7 @@ export default function App() {
           <div className="flex-1 flex flex-col overflow-x-hidden">
             
             {/* Main Preview Area */}
-            <section className="flex-1 flex flex-col w-full min-h-[360px] md:max-h-[450px]">
+            <section className="flex-1 flex flex-col w-full min-h-[360px] md:max-h-[480px]">
               <div className="relative w-full flex-grow flex flex-col items-center justify-center bg-black/20 rounded-xl backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/20 overflow-hidden relative group">
                 
                 {isWorking ? (
@@ -799,9 +919,15 @@ export default function App() {
                           <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
+                                    <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">{t.provider}</span>
+                                    <p className="text-white/90 capitalize">{currentImage.provider === 'gitee' ? 'Gitee AI' : 'Hugging Face'}</p>
+                                </div>
+                                <div>
                                     <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">{t.model}</span>
                                     <p className="text-white/90">{getModelLabel(currentImage.model)}</p>
                                 </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">{t.dimensions}</span>
                                     <p className="text-white/90">
@@ -809,6 +935,15 @@ export default function App() {
                                         {currentImage.isUpscaled && <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 font-bold">HD</span>}
                                     </p>
                                 </div>
+                                {currentImage.duration !== undefined && (
+                                    <div>
+                                    <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">{t.duration}</span>
+                                    <p className="font-mono text-white/90 flex items-center gap-1">
+                                        <Timer className="w-3 h-3 text-purple-400" />
+                                        {currentImage.duration.toFixed(1)}s
+                                    </p>
+                                    </div>
+                                )}
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 {currentImage.seed !== undefined && (
@@ -817,13 +952,10 @@ export default function App() {
                                     <p className="font-mono text-white/90">{currentImage.seed}</p>
                                     </div>
                                 )}
-                                {currentImage.duration !== undefined && (
+                                {currentImage.steps !== undefined && (
                                     <div>
-                                    <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">{t.duration}</span>
-                                    <p className="font-mono text-white/90 flex items-center gap-1">
-                                        <Timer className="w-3 h-3 text-purple-400" />
-                                        {currentImage.duration.toFixed(1)}s
-                                    </p>
+                                    <span className="block text-white/40 text-[10px] uppercase tracking-wider font-semibold mb-0.5">{t.steps}</span>
+                                    <p className="font-mono text-white/90">{currentImage.steps}</p>
                                     </div>
                                 )}
                             </div>
@@ -890,21 +1022,25 @@ export default function App() {
 
                                 <div className="w-px h-5 bg-white/10 mx-1"></div>
 
-                                <Tooltip content={isUpscaling ? t.upscaling : t.upscale}>
-                                    <button
-                                        onClick={handleUpscale}
-                                        disabled={isUpscaling || currentImage.isUpscaled}
-                                        className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${currentImage.isUpscaled ? 'text-purple-400 bg-purple-500/10' : 'text-white/70 hover:text-purple-400 hover:bg-white/10'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                                    >
-                                        {isUpscaling ? (
-                                            <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
-                                        ) : (
-                                            <Icon4x className="w-5 h-5 transition-colors duration-300" />
-                                        )}
-                                    </button>
-                                </Tooltip>
-
-                                <div className="w-px h-5 bg-white/10 mx-1"></div>
+                                {/* Upscale Button - Conditionally Rendered for Hugging Face only */}
+                                {provider === 'huggingface' && (
+                                    <>
+                                        <Tooltip content={isUpscaling ? t.upscaling : t.upscale}>
+                                            <button
+                                                onClick={handleUpscale}
+                                                disabled={isUpscaling || currentImage.isUpscaled}
+                                                className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${currentImage.isUpscaled ? 'text-purple-400 bg-purple-500/10' : 'text-white/70 hover:text-purple-400 hover:bg-white/10'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                            >
+                                                {isUpscaling ? (
+                                                    <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+                                                ) : (
+                                                    <Icon4x className="w-5 h-5 transition-colors duration-300" />
+                                                )}
+                                            </button>
+                                        </Tooltip>
+                                        <div className="w-px h-5 bg-white/10 mx-1"></div>
+                                    </>
+                                )}
 
                                 <Tooltip content={t.toggleBlur}>
                                     <button 
@@ -973,6 +1109,7 @@ export default function App() {
             lang={lang}
             setLang={setLang}
             t={t}
+            provider={provider}
         />
 
         {/* FAQ Modal */}

@@ -1,18 +1,21 @@
 # Peinture (AI Image Gen)
 
-A sleek, dark-themed AI image generator built with React, TypeScript, and Tailwind CSS. This application leverages powerful Hugging Face models (Z-Image Turbo, Qwen Image Fast) to generate high-quality images from text prompts in seconds.
+A sleek, dark-themed AI image generator built with React, TypeScript, and Tailwind CSS. This application leverages powerful generative models from **Hugging Face** and **Gitee AI** to create high-quality images from text prompts in seconds.
 
 ![App Screenshot](https://cdn.xiangfa.org/upload/WX20251206-170626@2x.png)
 
 ## ✨ Features
 
-- **Multi-Model Support**: Switch between `Z-Image Turbo` and `Qwen Image Fast` for different generation styles and speeds.
-- **Prompt Optimization**: Integrated AI prompt enhancer that expands simple ideas into detailed, cinematic descriptions.
+- **Dual AI Providers**: Seamlessly switch between **Hugging Face** and **Gitee AI** providers to access different model ecosystems and quotas.
+- **Multi-Model Support**: Access diverse models including:
+  - Hugging Face: `Z-Image Turbo`, `Qwen Image Fast`, `Ovis Image`
+  - Gitee AI: `Z-Image Turbo`, `Qwen Image`
+- **Prompt Optimization**: Integrated AI prompt enhancer that expands simple ideas into detailed, cinematic descriptions (powered by Pollinations.ai for HF and Qwen3 for Gitee).
+- **Advanced Controls**: Fine-tune your creations with adjustable **inference steps**, **seed control**, and **HD Mode** (High Definition).
 - **History Gallery**: Automatically saves generated images locally. View, zoom, pan, and manage your creation history.
-- **Interactive Viewer**: Zoom and pan capabilities for detailed image inspection.
-- **4x Resolution**: Using AI technology, any image can be upscaled 4x resolution, achieving a maximum image quality of 8K.
+- **4x Resolution**: AI upscaling technology to increase image resolution up to 4x (Supported on Hugging Face).
 - **Multilingual**: Full support for English and Chinese (中文) interfaces.
-- **Hugging Face Integration**: Optional API token support for higher rate limits.
+- **Token Management**: Configure personal API tokens for higher rate limits and stability.
 - **Privacy Focused**: History is stored in your browser's LocalStorage; no backend database is required for user data.
 
 ## 🛠 Tech Stack
@@ -23,8 +26,9 @@ A sleek, dark-themed AI image generator built with React, TypeScript, and Tailwi
 - **Icons**: Lucide React
 - **Animation**: CSS Transitions & Tailwind
 - **APIs**:
-  - Hugging Face Integration (Image Generate Engineering)
-  - Pollinations.ai (Prompt Engineering)
+  - **Hugging Face Inference API** (Image Generation & Upscaling)
+  - **Gitee AI API** (Image Generation & Prompt Optimization)
+  - **Pollinations.ai** (Prompt Engineering for HF)
 
 ## 🚀 Getting Started
 
@@ -109,15 +113,20 @@ To host on any standard web server or CDN:
 
 ## ⚙️ Configuration
 
+You can configure API tokens in the app's **Settings** menu.
+
 ### Hugging Face Token (Optional)
+The application works out-of-the-box using public quotas. However, for heavy usage or during peak times, providing your own token is recommended.
+1. Get a token from [Hugging Face Settings](https://huggingface.co/settings/tokens).
+2. Paste it into the **Hugging Face Token** field in Settings.
 
-The application works out-of-the-box using public quotas. However, for heavy usage, users can provide their own Hugging Face Read Token.
+### Gitee AI Token (Required for Gitee)
+To use the Gitee AI provider, you must provide an API token.
+1. Get a token from [Gitee AI Dashboard](https://ai.gitee.com/dashboard/settings/tokens).
+2. Paste it into the **Gitee AI Token** field in Settings.
+3. Gitee AI provides a daily free quota for generated images.
 
-1. Click the **Settings** in the top right.
-2. Paste your token in the "Hugging Face Token" field.
-3. Click **Save**.
-
-This token is stored securely in your browser's `localStorage` and is strictly used to authenticate requests to the Hugging Face Inference endpoints.
+*Tokens are stored securely in your browser's `localStorage` and are strictly used to authenticate requests to the respective Inference endpoints.*
 
 ## 🤝 Contributing
 

@@ -10,7 +10,7 @@ const POLLINATIONS_API_URL = "https://text.pollinations.ai/openai";
 
 const TOKEN_STORAGE_KEY = 'huggingFaceToken';
 const TOKEN_STATUS_KEY = 'hf_token_status';
-const QUOTA_ERROR_MSG = "Your today's quota has been used up. You can set up Hugging Face Token to get more quota.";
+const QUOTA_ERROR_KEY = "error_quota_exhausted";
 
 interface TokenStatusStore {
   date: string; // YYYY-MM-DD
@@ -96,7 +96,7 @@ const runWithTokenRetry = async <T>(operation: (token: string | null) => Promise
     
     // If we have tokens configured but all are exhausted
     if (!token) {
-       throw new Error("All configured Hugging Face tokens have exhausted their daily quota.");
+       throw new Error(QUOTA_ERROR_KEY);
     }
 
     try {
@@ -105,7 +105,7 @@ const runWithTokenRetry = async <T>(operation: (token: string | null) => Promise
       lastError = error;
       
       const isQuotaError = 
-        error.message === QUOTA_ERROR_MSG || 
+        error.message === QUOTA_ERROR_KEY || 
         error.message?.includes("429") ||
         error.status === 429;
 
@@ -120,7 +120,7 @@ const runWithTokenRetry = async <T>(operation: (token: string | null) => Promise
     }
   }
   
-  throw lastError || new Error("Failed to generate image with available tokens.");
+  throw lastError || new Error("error_api_connection");
 };
 
 // --- Service Logic ---
@@ -185,7 +185,7 @@ function extractCompleteEventData(sseStream: string): any | null {
         isCompleteEvent = true;
       } else if (line.substring(6).trim() === 'error') {
         isCompleteEvent = false;
-        throw new Error(QUOTA_ERROR_MSG);
+        throw new Error(QUOTA_ERROR_KEY);
       } else {
         isCompleteEvent = false; // Reset if it's another event type
       }
@@ -206,7 +206,8 @@ const generateZImage = async (
   prompt: string,
   aspectRatio: AspectRatioOption,
   seed: number = Math.round(Math.random() * 2147483647),
-  enableHD: boolean = false
+  enableHD: boolean = false,
+  steps: number = 9
 ): Promise<GeneratedImage> => {
   let { width, height } = getZImageDimensions(aspectRatio, enableHD);
 
@@ -216,7 +217,7 @@ const generateZImage = async (
         method: "POST",
         headers: getAuthHeaders(token),
         body: JSON.stringify({
-            data: [prompt, height, width, 8, seed, false]
+            data: [prompt, height, width, steps, seed, false]
         })
         });
         const { event_id } = await queue.json();
@@ -226,6 +227,8 @@ const generateZImage = async (
         const result = await response.text();
         const data = extractCompleteEventData(result);
 
+        if (!data) throw new Error("error_invalid_response");
+
         return {
         id: crypto.randomUUID(),
         url: data[0].url,
@@ -233,7 +236,8 @@ const generateZImage = async (
         prompt,
         aspectRatio,
         timestamp: Date.now(),
-        seed
+        seed,
+        steps
         };
     } catch (error) {
         console.error("Z-Image Turbo Generation Error:", error);
@@ -245,15 +249,17 @@ const generateZImage = async (
 const generateQwenImage = async (
   prompt: string,
   aspectRatio: AspectRatioOption,
-  seed?: number
+  seed?: number,
+  steps: number = 8
 ): Promise<GeneratedImage> => {
+
   return runWithTokenRetry(async (token) => {
     try {    
         const queue = await fetch(QWEN_IMAGE_BASE_API_URL + '/gradio_api/call/generate_image', {
         method: "POST",
         headers: getAuthHeaders(token),
         body: JSON.stringify({
-            data: [prompt, seed || 42, seed === undefined, aspectRatio, 3, 8]
+            data: [prompt, seed || 42, seed === undefined, aspectRatio, 3, steps]
         })
         });
         const { event_id } = await queue.json();
@@ -263,6 +269,8 @@ const generateQwenImage = async (
         const result = await response.text();
         const data = extractCompleteEventData(result);
 
+        if (!data) throw new Error("error_invalid_response");
+
         return {
         id: crypto.randomUUID(),
         url: data[0].url,
@@ -270,7 +278,8 @@ const generateQwenImage = async (
         prompt,
         aspectRatio,
         timestamp: Date.now(),
-        seed: parseInt(data[1].replace('Seed used for generation: ', ''))
+        seed: parseInt(data[1].replace('Seed used for generation: ', '')),
+        steps
         };
     } catch (error) {
         console.error("Qwen Image Fast Generation Error:", error);
@@ -283,7 +292,8 @@ const generateOvisImage = async (
   prompt: string,
   aspectRatio: AspectRatioOption,
   seed: number = Math.round(Math.random() * 2147483647),
-  enableHD: boolean = false
+  enableHD: boolean = false,
+  steps: number = 24
 ): Promise<GeneratedImage> => {
   let { width, height } = getZImageDimensions(aspectRatio, enableHD);
 
@@ -293,7 +303,7 @@ const generateOvisImage = async (
         method: "POST",
         headers: getAuthHeaders(token),
         body: JSON.stringify({
-            data: [prompt, height, width, seed, 24, 4]
+            data: [prompt, height, width, seed, steps, 4]
         })
         });
         const { event_id } = await queue.json();
@@ -303,6 +313,8 @@ const generateOvisImage = async (
         const result = await response.text();
         const data = extractCompleteEventData(result);
 
+        if (!data) throw new Error("error_invalid_response");
+
         return {
         id: crypto.randomUUID(),
         url: data[0].url,
@@ -310,7 +322,8 @@ const generateOvisImage = async (
         prompt,
         aspectRatio,
         timestamp: Date.now(),
-        seed
+        seed,
+        steps
         };
     } catch (error) {
         console.error("Ovis Image Generation Error:", error);
@@ -324,14 +337,15 @@ export const generateImage = async (
   prompt: string,
   aspectRatio: AspectRatioOption,
   seed?: number,
-  enableHD: boolean = false
+  enableHD: boolean = false,
+  steps?: number
 ): Promise<GeneratedImage> => {
   if (model === 'qwen-image-fast') {
-    return generateQwenImage(prompt, aspectRatio, seed);
+    return generateQwenImage(prompt, aspectRatio, seed, steps);
   } else if (model === 'ovis-image') {
-    return generateOvisImage(prompt, aspectRatio, seed)
+    return generateOvisImage(prompt, aspectRatio, seed, enableHD, steps)
   } else {
-    return generateZImage(prompt, aspectRatio, seed, enableHD);
+    return generateZImage(prompt, aspectRatio, seed, enableHD, steps);
   }
 };
 
@@ -352,10 +366,12 @@ export const upscaler = async (url: string): Promise<{ url: string }> => {
         const result = await response.text();
         const data = extractCompleteEventData(result);
 
+        if (!data) throw new Error("error_invalid_response");
+
         return { url: data[0].url };
     } catch (error) {
         console.error("Upscaler Error:", error);
-        throw error;
+        throw new Error("error_upscale_failed");
     }
   });
 };
@@ -390,7 +406,7 @@ I will ensure the output text is in the same language as the user's prompts.`
     });
 
     if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error("error_prompt_optimization_failed");
     }
 
     const data = await response.json();
@@ -399,6 +415,6 @@ I will ensure the output text is in the same language as the user's prompts.`
     return content || originalPrompt;
   } catch (error) {
     console.error("Prompt Optimization Error:", error);
-    throw error;
+    throw new Error("error_prompt_optimization_failed");
   }
 };

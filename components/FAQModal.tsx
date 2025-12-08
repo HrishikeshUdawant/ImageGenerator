@@ -1,4 +1,6 @@
 
+
+
 import React, { useState } from 'react';
 import { X, ChevronDown, ChevronUp, HelpCircle, ExternalLink, Shield, Zap, Database, Globe, CloudUpload, Github } from 'lucide-react';
 
@@ -45,6 +47,12 @@ export const FAQModal: React.FC<FAQModalProps> = ({ isOpen, onClose, t }) => {
                     {t.faq_a4_mid}
                     <a href="https://pollinations.ai/" target="_blank" className="text-purple-400 hover:text-purple-300 mx-1 underline decoration-purple-400/30 inline-flex items-center gap-0.5">
                         Pollinations.ai <ExternalLink className="w-3 h-3" />
+                    </a>
+                    {t.faq_a4_suffix}
+                    <br/><br/>
+                    {t.faq_a4_gitee}
+                    <a href="https://ai.gitee.com/" target="_blank" className="text-purple-400 hover:text-purple-300 mx-1 underline decoration-purple-400/30 inline-flex items-center gap-0.5">
+                        Gitee AI <ExternalLink className="w-3 h-3" />
                     </a>
                     {t.faq_a4_suffix}
                 </span>
