@@ -1,5 +1,6 @@
 
 
+
 export type Language = 'en' | 'zh';
 
 export const translations = {
@@ -30,6 +31,7 @@ export const translations = {
     details: "Details & Prompt",
     toggleBlur: "Toggle Blur / NSFW",
     settings: "Settings",
+    help: "FAQ",
     hfToken: "Hugging Face Token",
     hfTokenHelp: "Optional. Provide multiple tokens. Get",
     hfTokenLink: "Access Token",
@@ -39,6 +41,7 @@ export const translations = {
     tokenExhausted: "Exhausted",
     cancel: "Cancel",
     save: "Save",
+    close: "Close",
     language: "Language",
     hd: "HD",
     upscale: "Upscale",
@@ -52,12 +55,27 @@ export const translations = {
     hdEnabled: "High Definition Enabled",
     hdDisabled: "Enable High Definition",
 
+    // FAQ
+    faq_q1: "Is this service free to use?",
+    faq_a1: "Yes, this project is completely free. We use public API quotas. However, public quotas may be limited during peak times. You can add your own Hugging Face Token in Settings to get more stable generation and higher limits.",
+    faq_q2: "Is my data and privacy safe?",
+    faq_a2: "Absolutely. We prioritize privacy. All generation history, settings, and tokens are stored locally in your browser (LocalStorage). We do not have a backend database, and we do not collect your personal usage data.",
+    faq_q3: "How does the multi-token system work?",
+    faq_a3: "You can enter multiple Hugging Face tokens separated by commas. The system automatically creates a pool. If a token exhausts its daily quota, the system automatically marks it as exhausted for the day and seamlessly switches to the next available token without interrupting your workflow.",
+    faq_q4: "Which services power this app?",
+    faq_a4_prefix: "Image generation services are powered by",
+    faq_a4_mid: ", and prompt optimization is provided by",
+    faq_a4_suffix: ".",
+    faq_q5: "Can I host this myself?",
+    faq_a5: "Yes! This is an open-source project licensed under MIT. You can fork the repository from GitHub and deploy it to Vercel, Cloudflare Pages, or any static hosting service.",
+    footer_license: "Released under the MIT License. Open source and free forever.",
+
     // Aspect Ratios
     ar_square: "Default 1:1",
     ar_photo_9_16: "Photography 9:16",
     ar_movie: "Movie 16:9",
     ar_portrait_3_4: "Instagram 3:4",
-    ar_landscape_4_3: "Print 4:3",
+    ar_landscape_4_3: "PC Desktop 4:3",
     ar_portrait_3_2: "DSLR Camera 3:2",
     ar_landscape_2_3: "DSLR Photography 2:3",
   },
@@ -88,6 +106,7 @@ export const translations = {
     details: "详情与提示词",
     toggleBlur: "切换模糊 / NSFW",
     settings: "设置",
+    help: "常见问题",
     hfToken: "Hugging Face 令牌",
     hfTokenHelp: "可选。支持多个令牌。获取",
     hfTokenLink: "访问令牌",
@@ -97,6 +116,7 @@ export const translations = {
     tokenExhausted: "耗尽",
     cancel: "取消",
     save: "保存",
+    close: "关闭",
     language: "语言",
     hd: "高清",
     upscale: "超清放大",
@@ -110,12 +130,27 @@ export const translations = {
     hdEnabled: "已启用高清模式",
     hdDisabled: "启用高清模式",
 
+    // FAQ
+    faq_q1: "这个服务是免费的吗？",
+    faq_a1: "是的，本项目完全免费。默认使用公共 API 配额。由于公共配额在高峰期可能受限，您可以在设置中配置自己的 Hugging Face Token，以获得更稳定的生成体验和更高的使用额度。",
+    faq_q2: "我的隐私安全吗？",
+    faq_a2: "绝对安全。我们非常重视隐私。所有的生成历史、设置和 Token 都仅存储在您的本地浏览器中 (LocalStorage)。我们没有后台数据库，也不会收集您的个人使用数据。",
+    faq_q3: "多 Token 系统是如何工作的？",
+    faq_a3: "支持输入多个用逗号分隔的 Hugging Face 令牌。系统会自动建立令牌池。如果当前使用的 Token 耗尽了当日配额，系统会自动将其标记为当日耗尽，并无缝切换到下一个可用的 Token，确保您的创作不中断。",
+    faq_q4: "使用了哪些服务？",
+    faq_a4_prefix: "图片生成服务由",
+    faq_a4_mid: "提供支持，提示词优化功能由",
+    faq_a4_suffix: "提供。",
+    faq_q5: "我可以私有部署吗？",
+    faq_a5: "可以！这是一个基于 MIT 协议的开源项目。您可以从 GitHub Fork 代码库，并将其自由部署到 Vercel、Cloudflare Pages 或任何静态托管平台。",
+    footer_license: "基于 MIT 协议发布。永久开源免费。",
+
     // Aspect Ratios
     ar_square: "默认 1:1",
     ar_photo_9_16: "摄影 9:16",
     ar_movie: "电影 16:9",
     ar_portrait_3_4: "社交媒体 3:4",
-    ar_landscape_4_3: "打印 4:3",
+    ar_landscape_4_3: "电脑桌面 4:3",
     ar_portrait_3_2: "单反摄像 3:2",
     ar_landscape_2_3: "单反摄影 2:3",
   }

@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { generateImage, optimizePrompt, upscaler } from './services/hfService';
 import { GeneratedImage, AspectRatioOption, ModelOption } from './types';
 import { HistoryGallery } from './components/HistoryGallery';
 import { CustomSelect } from './components/CustomSelect';
 import { SettingsModal } from './components/SettingsModal';
+import { FAQModal } from './components/FAQModal';
 import { Logo, Icon4x } from './components/Icons'
 import { ImageComparison } from './components/ImageComparison';
 import { Tooltip } from './components/Tooltip';
@@ -33,6 +35,7 @@ import {
   Check as CheckIcon,
   RotateCcw,
   History,
+  CircleHelp,
 } from 'lucide-react';
 
 const MODEL_OPTIONS = [
@@ -118,6 +121,9 @@ export default function App() {
 
   // Settings State
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  
+  // FAQ State
+  const [showFAQ, setShowFAQ] = useState<boolean>(false);
 
   // Language Persistence
   useEffect(() => {
@@ -465,6 +471,15 @@ export default function App() {
                   >
                     <Github className="w-5 h-5" />
                   </a>
+              </Tooltip>
+
+              <Tooltip content={t.help} position="bottom">
+                  <button
+                    onClick={() => setShowFAQ(true)}
+                    className="flex items-center justify-center p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+                  >
+                    <CircleHelp className="w-5 h-5" />
+                  </button>
               </Tooltip>
 
               <Tooltip content={t.settings} position="bottom">
@@ -926,6 +941,13 @@ export default function App() {
             onClose={() => setShowSettings(false)} 
             lang={lang}
             setLang={setLang}
+            t={t}
+        />
+
+        {/* FAQ Modal */}
+        <FAQModal 
+            isOpen={showFAQ}
+            onClose={() => setShowFAQ(false)}
             t={t}
         />
       </div>
