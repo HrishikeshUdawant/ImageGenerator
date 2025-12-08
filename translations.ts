@@ -1,6 +1,7 @@
 
 
 
+
 export type Language = 'en' | 'zh';
 
 export const translations = {
@@ -59,7 +60,7 @@ export const translations = {
     faq_q1: "Is this service free to use?",
     faq_a1: "Yes, this project is completely free. We use public API quotas. However, public quotas may be limited during peak times. You can add your own Hugging Face Token in Settings to get more stable generation and higher limits.",
     faq_q2: "Is my data and privacy safe?",
-    faq_a2: "Absolutely. We prioritize privacy. All generation history, settings, and tokens are stored locally in your browser (LocalStorage). We do not have a backend database, and we do not collect your personal usage data.",
+    faq_a2: "Absolutely. We prioritize privacy. All generation history, settings, and tokens are stored locally in your browser (LocalStorage). We do not have a backend database, and we do not collect your personal usage data. Please note: Generated images are kept for 24 hours, so be sure to download your favorites. Prompt history is temporary and clears when you close the page.",
     faq_q3: "How does the multi-token system work?",
     faq_a3: "You can enter multiple Hugging Face tokens separated by commas. The system automatically creates a pool. If a token exhausts its daily quota, the system automatically marks it as exhausted for the day and seamlessly switches to the next available token without interrupting your workflow.",
     faq_q4: "Which services power this app?",
@@ -134,7 +135,7 @@ export const translations = {
     faq_q1: "这个服务是免费的吗？",
     faq_a1: "是的，本项目完全免费。默认使用公共 API 配额。由于公共配额在高峰期可能受限，您可以在设置中配置自己的 Hugging Face Token，以获得更稳定的生成体验和更高的使用额度。",
     faq_q2: "我的隐私安全吗？",
-    faq_a2: "绝对安全。我们非常重视隐私。所有的生成历史、设置和 Token 都仅存储在您的本地浏览器中 (LocalStorage)。我们没有后台数据库，也不会收集您的个人使用数据。",
+    faq_a2: "绝对安全。我们非常重视隐私。所有的生成历史、设置和 Token 都仅存储在您的本地浏览器中 (LocalStorage)。我们没有后台数据库，也不会收集您的个人使用数据。温馨提示：生成的图片记录只会保留 24 小时，喜欢的图片请记得及时下载保存。提示词记录在您关闭页面后就会自动清空。",
     faq_q3: "多 Token 系统是如何工作的？",
     faq_a3: "支持输入多个用逗号分隔的 Hugging Face 令牌。系统会自动建立令牌池。如果当前使用的 Token 耗尽了当日配额，系统会自动将其标记为当日耗尽，并无缝切换到下一个可用的 Token，确保您的创作不中断。",
     faq_q4: "使用了哪些服务？",

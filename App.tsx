@@ -74,6 +74,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
   const [isUpscaling, setIsUpscaling] = useState<boolean>(false);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [currentImage, setCurrentImage] = useState<GeneratedImage | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -357,90 +358,115 @@ export default function App() {
   };
 
   const handleDownload = async (imageUrl: string, fileName: string) => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+
     try {
-      // 1. Handle Base64 Data URLs directly
-      if (imageUrl.startsWith('data:')) {
-        const link = document.createElement('a');
-        link.href = imageUrl;
-        link.download = fileName.endsWith('.png') ? fileName : `${fileName}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        return;
-      }
+      // Check if it is WebP format (either via extension or data uri)
+      const isWebPUrl = imageUrl.toLowerCase().split('?')[0].endsWith('.webp');
+      const isWebPData = imageUrl.startsWith('data:image/webp');
+      const shouldConvert = isWebPUrl || isWebPData;
 
-      // 2. Handle Remote URLs
-      try {
-        const response = await fetch(imageUrl, {
-            mode: 'cors', // Try to request with CORS
-        });
-        
-        if (!response.ok) throw new Error('Network response was not ok');
-        
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        
-        // Determine extension from content-type or fallback to png
-        let extension = 'png';
-        if (blob.type) {
-             const typeParts = blob.type.split('/');
-             if (typeParts.length > 1) extension = typeParts[1];
+      let converted = false;
+
+      // 1. Try to convert to PNG via Canvas ONLY if it matches WebP condition
+      if (shouldConvert) {
+        try {
+          await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.src = imageUrl;
+            img.onload = () => {
+              try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                  reject(new Error('Canvas context not found'));
+                  return;
+                }
+                ctx.drawImage(img, 0, 0);
+                
+                canvas.toBlob((blob) => {
+                  if (!blob) {
+                    reject(new Error('Canvas serialization failed'));
+                    return;
+                  }
+                  const url = window.URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  
+                  // Ensure .png extension and remove .webp if present
+                  let safeFileName = fileName.replace(/\.webp$/i, '');
+                  if (!safeFileName.toLowerCase().endsWith('.png')) {
+                    safeFileName += '.png';
+                  }
+                  
+                  link.download = safeFileName;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  window.URL.revokeObjectURL(url);
+                  resolve(true);
+                }, 'image/png');
+              } catch (err) {
+                reject(err);
+              }
+            };
+            img.onerror = (e) => reject(new Error('Image load failed'));
+          });
+          converted = true; // Mark as successful
+        } catch (conversionError) {
+          console.warn("PNG conversion failed, falling back to direct download...", conversionError);
         }
-
-        const finalFileName = fileName.includes('.') ? fileName : `${fileName}.${extension}`;
-        
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = finalFileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        // Clean up
-        window.URL.revokeObjectURL(blobUrl);
-
-      } catch (fetchError) {
-        console.warn("Direct fetch failed, attempting canvas fallback...", fetchError);
-        
-        // 3. Fallback: Canvas (for images that load but fetch fails, e.g. strict CORS but allows display)
-        // This is a "best effort" - if the image is tainted, toBlob will fail.
-        await new Promise((resolve, reject) => {
-             const img = new Image();
-             img.crossOrigin = "Anonymous";
-             img.src = imageUrl;
-             img.onload = () => {
-                 const canvas = document.createElement('canvas');
-                 canvas.width = img.naturalWidth;
-                 canvas.height = img.naturalHeight;
-                 const ctx = canvas.getContext('2d');
-                 if (!ctx) {
-                     reject(new Error('Canvas context not found'));
-                     return;
-                 }
-                 ctx.drawImage(img, 0, 0);
-                 canvas.toBlob((blob) => {
-                     if (!blob) {
-                         reject(new Error('Canvas serialization failed (likely tainted)'));
-                         return;
-                     }
-                     const url = window.URL.createObjectURL(blob);
-                     const link = document.createElement('a');
-                     link.href = url;
-                     link.download = fileName.endsWith('.png') ? fileName : `${fileName}.png`;
-                     document.body.appendChild(link);
-                     link.click();
-                     document.body.removeChild(link);
-                     window.URL.revokeObjectURL(url);
-                     resolve(true);
-                 });
-             };
-             img.onerror = (e) => reject(e);
-        });
       }
+
+      // 2. Fallback or Standard: Direct Download (Preserves original format if conversion failed or wasn't needed)
+      if (!converted) {
+        // Handle Base64 directly if canvas failed
+        if (imageUrl.startsWith('data:')) {
+            const link = document.createElement('a');
+            link.href = imageUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } else {
+            const response = await fetch(imageUrl, {
+                mode: 'cors',
+            });
+            
+            if (!response.ok) throw new Error('Network response was not ok');
+            
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            
+            // Determine extension from content-type
+            let extension = 'png';
+            if (blob.type) {
+                const typeParts = blob.type.split('/');
+                if (typeParts.length > 1) extension = typeParts[1];
+            }
+
+            const finalFileName = fileName.includes('.') ? fileName : `${fileName}.${extension}`;
+            
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = finalFileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+        }
+      }
+
     } catch (e) {
       console.error("All download methods failed:", e);
-      // 4. Last Resort: Open in new tab
+      // 3. Last Resort: Open in new tab
       window.open(imageUrl, '_blank');
+    } finally {
+        setIsDownloading(false);
     }
   };
 
@@ -894,9 +920,14 @@ export default function App() {
                                 <Tooltip content={t.download}>
                                     <button 
                                         onClick={() => handleDownload(currentImage.url, `generated-${currentImage.id}`)}
-                                        className="flex items-center justify-center w-10 h-10 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all"
+                                        disabled={isDownloading}
+                                        className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${isDownloading ? 'text-purple-400 bg-purple-500/10 cursor-not-allowed' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
                                     >
-                                        <Download className="w-5 h-5" />
+                                        {isDownloading ? (
+                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                        ) : (
+                                            <Download className="w-5 h-5" />
+                                        )}
                                     </button>
                                 </Tooltip>
                                 
