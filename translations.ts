@@ -1,4 +1,5 @@
 
+
 export type Language = 'en' | 'zh';
 
 export const translations = {
@@ -63,6 +64,17 @@ export const translations = {
     hdDisabled: "Enable High Definition",
     advancedSettings: "Advanced Settings",
     steps: "Steps",
+
+    // Tabs
+    tab_general: "General",
+    tab_prompt: "Prompt",
+
+    // System Prompts
+    systemPrompts: "Role Setting",
+    promptContent: "Prompt Content",
+    restoreDefault: "Restore Default",
+    systemPromptHelp: "Customize the role setting used for prompt optimization.",
+    optimizationModel: "Current Model",
 
     // Errors
     error_quota_exhausted: "Your today's quota has been used up. You can set up Hugging Face Token to get more quota.",
@@ -164,6 +176,17 @@ export const translations = {
     hdDisabled: "启用高清模式",
     advancedSettings: "高级参数",
     steps: "步数",
+    
+    // Tabs
+    tab_general: "通用",
+    tab_prompt: "提示词",
+
+    // System Prompts
+    systemPrompts: "角色设定",
+    promptContent: "提示词内容",
+    restoreDefault: "恢复默认内容",
+    systemPromptHelp: "自定义用于提示词优化的角色设定。",
+    optimizationModel: "当前模型",
 
     // Errors
     error_quota_exhausted: "您的今日配额已用完。您可以设置 Hugging Face 令牌以获取更多配额。",

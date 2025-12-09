@@ -1,6 +1,7 @@
 
+
 import { GeneratedImage, AspectRatioOption, ModelOption } from "../types";
-import { generateUUID } from "./utils";
+import { generateUUID, getSystemPromptContent, FIXED_SYSTEM_PROMPT_SUFFIX, getOptimizationModel } from "./utils";
 
 const GITEE_GENERATE_API_URL = "https://ai.gitee.com/v1/images/generations";
 const GITEE_CHAT_API_URL = "https://ai.gitee.com/v1/chat/completions";
@@ -230,6 +231,11 @@ export const generateGiteeImage = async (
 export const optimizePromptGitee = async (originalPrompt: string, lang: string): Promise<string> => {
   return runWithGiteeTokenRetry(async (token) => {
     try {
+      const model = getOptimizationModel('gitee');
+      // Append the fixed suffix to the user's custom system prompt
+      const activePromptContent = getSystemPromptContent() + FIXED_SYSTEM_PROMPT_SUFFIX;
+      const systemInstruction = activePromptContent.replace('{language}', lang === 'zh' ? 'Chinese' : 'English');
+
       const response = await fetch(GITEE_CHAT_API_URL, {
         method: 'POST',
         headers: {
@@ -237,17 +243,11 @@ export const optimizePromptGitee = async (originalPrompt: string, lang: string):
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          model: 'Qwen3-235B-A22B-Instruct-2507',
+          model: model,
           messages: [
             {
               role: 'system',
-              content: `I am a master AI image prompt engineering advisor, specializing in crafting prompts that yield cinematic, hyper-realistic, and deeply evocative visual narratives, optimized for advanced generative models.
-My core purpose is to meticulously rewrite, expand, and enhance user's image prompts.
-I transform prompts to create visually stunning images by rigorously optimizing elements such as dramatic lighting, intricate textures, compelling composition, and a distinctive artistic style.
-My generated prompt output will be strictly under 300 words. Prior to outputting, I will internally validate that the refined prompt strictly adheres to the word count limit and effectively incorporates the intended stylistic and technical enhancements.
-My output will consist exclusively of the refined image prompt text. It will commence immediately, with no leading whitespace.
-The text will strictly avoid markdown, quotation marks, conversational preambles, explanations, or concluding remarks.
-I will ensure the output text is in ${lang === 'zh' ? 'Chinese' : 'English'}.`
+              content: systemInstruction
             },
             {
               role: 'user',

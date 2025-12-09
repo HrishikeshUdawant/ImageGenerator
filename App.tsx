@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { generateImage, optimizePrompt, upscaler } from './services/hfService';
 import { generateGiteeImage, optimizePromptGitee } from './services/giteeService';
 import { generateMSImage, optimizePromptMS } from './services/msService';
 import { GeneratedImage, AspectRatioOption, ModelOption, ProviderOption } from './types';
 import { HistoryGallery } from './components/HistoryGallery';
-import { CustomSelect } from './components/CustomSelect';
+import { Select } from './components/Select';
 import { SettingsModal } from './components/SettingsModal';
 import { FAQModal } from './components/FAQModal';
 import { Logo, Icon4x } from './components/Icons'
@@ -384,7 +383,7 @@ export default function App() {
   };
 
   const handleRandomizeSeed = () => {
-    setSeed(Math.floor(Math.random() * 1000000).toString());
+    setSeed(Math.floor(Math.random() * 2147483647).toString());
   };
 
   const handleAdjustSeed = (amount: number) => {
@@ -570,7 +569,7 @@ export default function App() {
       <div className="flex h-full grow flex-col">
         {/* Header */}
         <header className="w-full backdrop-blur-md sticky top-0 z-50 bg-background-dark/30 border-b border-white/5">
-          <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-2 md:px-8 md:py-4">
+          <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3 md:px-8 md:py-4">
             <div className="flex items-center gap-2 text-white">
               <Logo className="size-10" />
               <h1 className="text-white text-xl font-bold leading-tight tracking-[-0.015em]">{t.appTitle}</h1>
@@ -580,7 +579,7 @@ export default function App() {
               <Tooltip content={t.sourceCode} position="bottom">
                   <a
                     href="https://github.com/Amery2010/peinture"
-                    className="flex items-center justify-center p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+                    className="flex items-center justify-center p-2 rounded-lg text-white/70 hover:text-pink-400 hover:bg-white/10 transition-all active:scale-95"
                     target="_blank"
                   >
                     <Github className="w-5 h-5" />
@@ -590,7 +589,7 @@ export default function App() {
               <Tooltip content={t.help} position="bottom">
                   <button
                     onClick={() => setShowFAQ(true)}
-                    className="flex items-center justify-center p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+                    className="flex items-center justify-center p-2 rounded-lg text-white/70 hover:text-green-400 hover:bg-white/10 transition-all active:scale-95"
                   >
                     <CircleHelp className="w-5 h-5" />
                   </button>
@@ -599,7 +598,7 @@ export default function App() {
               <Tooltip content={t.settings} position="bottom">
                   <button
                     onClick={() => setShowSettings(true)}
-                    className="flex items-center justify-center p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+                    className="flex items-center justify-center p-2 rounded-lg text-white/70 hover:text-purple-400 hover:bg-white/10 transition-all active:scale-95"
                   >
                     <Settings className="w-5 h-5" />
                   </button>
@@ -608,12 +607,12 @@ export default function App() {
           </div>
         </header>
 
-        <main className="w-full max-w-7xl flex-1 flex flex-col-reverse md:items-stretch md:mx-auto md:flex-row gap-6 px-6 md:px-6 pb-8 pt-6">
+        <main className="w-full max-w-7xl flex-1 flex flex-col-reverse md:items-stretch md:mx-auto md:flex-row gap-4 md:gap-6 px-4 md:px-8 pb-4 md:pb-8 pt-4 md:pt-6">
           
           {/* Left Column: Controls */}
-          <aside className="w-full md:max-w-sm flex-shrink-0 flex flex-col gap-6">
-            <div className="flex-grow space-y-6">
-              <div className="relative z-10 bg-black/20 p-6 rounded-xl backdrop-blur-xl border border-white/10 flex flex-col gap-6 shadow-2xl shadow-black/20">
+          <aside className="w-full md:max-w-sm flex-shrink-0 flex flex-col gap-4 md:gap-6">
+            <div className="flex-grow space-y-4 md:space-y-6">
+              <div className="relative z-10 bg-black/20 p-4 md:p-6 rounded-xl backdrop-blur-xl border border-white/10 flex flex-col gap-4 md:gap-6 shadow-2xl shadow-black/20">
                 
                 {/* Prompt Input */}
                 <div className="group flex flex-col flex-1">
@@ -694,9 +693,9 @@ export default function App() {
                 </div>
 
                 {/* Parameters */}
-                <div className="space-y-6">
+                <div className="space-y-4 md:space-y-6">
                   {/* Provider Selection */}
-                  <CustomSelect
+                  <Select
                     label={t.provider}
                     value={provider}
                     onChange={handleProviderChange}
@@ -705,7 +704,7 @@ export default function App() {
                   />
 
                   {/* Model Selection */}
-                  <CustomSelect
+                  <Select
                     label={t.model}
                     value={model}
                     onChange={(val) => setModel(val as ModelOption)}
@@ -731,7 +730,7 @@ export default function App() {
                   />
 
                   {/* Aspect Ratio */}
-                  <CustomSelect
+                  <Select
                     label={t.aspectRatio}
                     value={aspectRatio}
                     onChange={(val) => setAspectRatio(val as AspectRatioOption)}

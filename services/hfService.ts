@@ -1,6 +1,7 @@
 
+
 import { GeneratedImage, AspectRatioOption, ModelOption } from "../types";
-import { generateUUID } from "./utils";
+import { generateUUID, getSystemPromptContent, FIXED_SYSTEM_PROMPT_SUFFIX, getOptimizationModel } from "./utils";
 
 const ZIMAGE_BASE_API_URL = "https://luca115-z-image-turbo.hf.space";
 const QWEN_IMAGE_BASE_API_URL = "https://mcp-tools-qwen-image-fast.hf.space";
@@ -380,23 +381,22 @@ export const upscaler = async (url: string): Promise<{ url: string }> => {
 
 export const optimizePrompt = async (originalPrompt: string, lang: string): Promise<string> => {
   try {
+    const model = getOptimizationModel('huggingface');
+    // Append the fixed suffix to the user's custom system prompt
+    const activePromptContent = getSystemPromptContent() + FIXED_SYSTEM_PROMPT_SUFFIX;
+    const systemInstruction = activePromptContent.replace('{language}', lang === 'zh' ? 'Chinese' : 'English');
+
     const response = await fetch(POLLINATIONS_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'openai-fast',
+        model: model,
         messages: [
           {
             role: 'system',
-            content: `I am a master AI image prompt engineering advisor, specializing in crafting prompts that yield cinematic, hyper-realistic, and deeply evocative visual narratives, optimized for advanced generative models.
-My core purpose is to meticulously rewrite, expand, and enhance user's image prompts.
-I transform prompts to create visually stunning images by rigorously optimizing elements such as dramatic lighting, intricate textures, compelling composition, and a distinctive artistic style.
-My generated prompt output will be strictly under 300 words. Prior to outputting, I will internally validate that the refined prompt strictly adheres to the word count limit and effectively incorporates the intended stylistic and technical enhancements.
-My output will consist exclusively of the refined image prompt text. It will commence immediately, with no leading whitespace.
-The text will strictly avoid markdown, quotation marks, conversational preambles, explanations, or concluding remarks.
-I will ensure the output text is in ${lang === 'zh' ? 'Chinese' : 'English'}.`
+            content: systemInstruction
           },
           {
             role: 'user',
