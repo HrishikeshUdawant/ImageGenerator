@@ -4,7 +4,6 @@ import { generateUUID } from "./utils";
 
 const MS_GENERATE_API_URL = "https://api-inference.modelscope.cn/v1/images/generations";
 const MS_CHAT_API_URL = "https://api-inference.modelscope.cn/v1/chat/completions";
-const MS_TASK_API_URL = "https://api-inference.modelscope.cn/v1/tasks";
 
 // --- Token Management System ---
 
@@ -166,25 +165,6 @@ const getDimensions = (ratio: AspectRatioOption, enableHD: boolean): { width: nu
 
 // --- Service Logic ---
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-const checkTaskStatus = async (taskId: string, token: string): Promise<any> => {
-  const response = await fetch(`${MS_TASK_API_URL}/${taskId}`, {
-    method: 'GET',
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-      "X-ModelScope-Task-Type": "image_generation"
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Model Scope Task Check Error: ${response.status}`);
-  }
-
-  return response.json();
-};
-
 export const generateMSImage = async (
   model: ModelOption,
   prompt: string,
@@ -200,13 +180,11 @@ export const generateMSImage = async (
 
   return runWithMsTokenRetry(async (token) => {
     try {
-      // 1. Submit async task
       const response = await fetch(MS_GENERATE_API_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "X-ModelScope-Async-Mode": "true"
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
           prompt,
@@ -222,49 +200,25 @@ export const generateMSImage = async (
         throw new Error(errData.message || `Model Scope API Error: ${response.status}`);
       }
 
-      const initialData = await response.json();
-      const taskId = initialData.task_id;
+      const data = await response.json();
+      
+      const imageUrl = data.images?.[0]?.url;
 
-      if (!taskId) {
+      if (!imageUrl) {
           throw new Error("error_invalid_response");
       }
 
-      // 2. Poll for status
-      let attempts = 0;
-      const maxAttempts = 60; // 60 * 2s = 120s timeout
-      
-      while (attempts < maxAttempts) {
-          await sleep(2000); // Wait 2 seconds
-          
-          const taskStatus = await checkTaskStatus(taskId, token);
-          
-          if (taskStatus.task_status === 'SUCCEED') {
-              // Task done
-              const imageUrl = taskStatus.output_images?.[0];
-              if (!imageUrl) {
-                 throw new Error("error_invalid_response");
-              }
-
-              return {
-                id: generateUUID(),
-                url: imageUrl,
-                model,
-                prompt,
-                aspectRatio,
-                timestamp: Date.now(),
-                seed: finalSeed,
-                steps: finalSteps,
-                provider: 'modelscope'
-              };
-
-          } else if (taskStatus.task_status === 'FAILED' || taskStatus.task_status === 'CANCELED') {
-              throw new Error("error_invalid_response");
-          }
-          // If PENDING or RUNNING, continue loop
-          attempts++;
-      }
-      
-      throw new Error("error_api_connection");
+      return {
+        id: generateUUID(),
+        url: imageUrl,
+        model,
+        prompt,
+        aspectRatio,
+        timestamp: Date.now(),
+        seed: finalSeed,
+        steps: finalSteps,
+        provider: 'modelscope'
+      };
 
     } catch (error) {
       console.error("Model Scope Image Generation Error:", error);
