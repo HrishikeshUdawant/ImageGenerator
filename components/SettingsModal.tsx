@@ -248,7 +248,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
                                                 onChange={handleTokenChange}
                                                 onPaste={handlePaste}
                                                 placeholder="hf_...,hf_..."
-                                                className="w-full pl-4 pr-10 py-3.5 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-none focus:ring-4 focus:ring-yellow-500/10 focus:border-yellow-500/50 hover:border-white/20 transition-all font-mono text-sm"
+                                                className="w-full pl-4 pr-10 py-3.5 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-0 focus:ring-4 focus:ring-yellow-500/10 focus:border-yellow-500/50 hover:border-white/20 transition-all duration-300 ease-out font-mono text-sm"
                                             />
                                             <button
                                                 type="button"
@@ -305,7 +305,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
                                                 onChange={handleGiteeTokenChange}
                                                 onPaste={handleGiteePaste}
                                                 placeholder="...,..."
-                                                className="w-full pl-4 pr-10 py-3.5 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-500/50 hover:border-white/20 transition-all font-mono text-sm"
+                                                className="w-full pl-4 pr-10 py-3.5 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-0 focus:ring-4 focus:ring-red-500/10 focus:border-red-500/50 hover:border-white/20 transition-all duration-300 ease-out font-mono text-sm"
                                             />
                                             <button
                                                 type="button"
@@ -362,7 +362,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
                                                 onChange={handleMsTokenChange}
                                                 onPaste={handleMsPaste}
                                                 placeholder="...,..."
-                                                className="w-full pl-4 pr-10 py-3.5 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 hover:border-white/20 transition-all font-mono text-sm"
+                                                className="w-full pl-4 pr-10 py-3.5 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-0 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 hover:border-white/20 transition-all duration-300 ease-out font-mono text-sm"
                                             />
                                             <button
                                                 type="button"
@@ -422,7 +422,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
                                             value={optimModel}
                                             onChange={(e) => setOptimModel(e.target.value)}
                                             placeholder={DEFAULT_OPTIMIZATION_MODELS[provider]}
-                                            className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-none focus:ring-4 focus:ring-cyan-500/10 focus:border-cyan-500/50 hover:border-white/20 transition-all font-mono text-sm"
+                                            className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder:text-white/20 focus:outline-0 focus:ring-4 focus:ring-cyan-500/10 focus:border-cyan-500/50 hover:border-white/20 transition-all duration-300 ease-out font-mono text-sm"
                                         />
                                     </div>
                                 </div>
@@ -449,7 +449,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
                                             value={systemPrompt}
                                             onChange={(e) => setSystemPrompt(e.target.value)}
                                             placeholder={t.promptContent}
-                                            className="w-full h-32 bg-white/[0.03] border border-white/10 rounded-xl p-4 text-sm text-white/80 placeholder:text-white/20 focus:outline-none focus:ring-4 focus:ring-pink-500/10 focus:border-pink-500/50 hover:border-white/20 resize-none custom-scrollbar leading-relaxed font-mono transition-all"
+                                            className="w-full h-32 bg-white/[0.03] border border-white/10 rounded-xl p-4 text-sm text-white/80 placeholder:text-white/20 focus:outline-0 focus:ring-4 focus:ring-pink-500/10 focus:border-pink-500/50 hover:border-white/20 resize-none custom-scrollbar leading-relaxed font-mono transition-all duration-300 ease-out"
                                         />
                                     </div>
 
