@@ -40,7 +40,7 @@ export const saveSystemPromptContent = (content: string) => {
 
 export const DEFAULT_OPTIMIZATION_MODELS: Record<string, string> = {
   huggingface: 'openai-fast',
-  gitee: 'Qwen3-235B-A22B-Instruct-2507',
+  gitee: 'DeepSeek-V3.2',
   modelscope: 'deepseek-ai/DeepSeek-V3.2'
 };
 

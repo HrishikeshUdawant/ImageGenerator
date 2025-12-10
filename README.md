@@ -13,13 +13,14 @@ A sleek, dark-themed AI image generator built with React, TypeScript, and Tailwi
 
 - **Triple AI Providers**: Seamlessly switch between **Hugging Face**, **Gitee AI**, and **Model Scope** providers to access different model ecosystems and quotas.
 - **Multi-Model Support**: Access diverse models including:
-  - Hugging Face: `Z-Image Turbo`, `Qwen Image Fast`, `Ovis Image`
-  - Gitee AI: `Z-Image Turbo`, `Qwen Image`
-  - Model Scope: `Z-Image Turbo`
-- **Prompt Optimization**: Integrated AI prompt enhancer that expands simple ideas into detailed, cinematic descriptions (powered by Pollinations.ai for HF, Qwen3 for Gitee, and DeepSeek-V3 for Model Scope).
-- **Advanced Controls**: Fine-tune your creations with adjustable **inference steps**, **seed control**, and **HD Mode** (High Definition).
+  - Hugging Face: `Z-Image Turbo`, `Qwen Image Fast`, `Ovis Image`, `FLUX.1 Schnell`
+  - Gitee AI: `Z-Image Turbo`, `Qwen Image`, `FLUX.1 Schnell`, `FLUX.1 Krea`, `FLUX.1 Dev`
+  - Model Scope: `Z-Image Turbo`, `FLUX.2`, `FLUX.1 Krea`, `FLUX.1`
+- **Auto Translation**: Intelligent detection and translation of non-English prompts to optimize performance for English-centric models like **FLUX**.
+- **Prompt Optimization**: Integrated AI prompt enhancer that expands simple ideas into detailed, cinematic descriptions (powered by Pollinations.ai for HF, DeepSeek for Gitee AI and Model Scope).
+- **Advanced Controls**: Fine-tune your creations with adjustable **inference steps**, **seed control**, **guidance scale** (for Flux), and **HD Mode** (High Definition).
 - **History Gallery**: Automatically saves generated images locally. View, zoom, pan, and manage your creation history.
-- **4x Resolution**: AI upscaling technology to increase image resolution up to 4x (Supported on Hugging Face).
+- **4x Resolution**: AI upscaling technology to increase image resolution up to 4x (Only supported on Hugging Face).
 - **Multilingual**: Full support for English and Chinese (中文) interfaces.
 - **Token Management**: Configure personal API tokens for higher rate limits and stability.
 - **Privacy Focused**: History is stored in your browser's LocalStorage; no backend database is required for user data.

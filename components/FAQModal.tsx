@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { X, ChevronDown, ChevronUp, HelpCircle, ExternalLink, Shield, Zap, Database, Globe, CloudUpload, Github } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, HelpCircle, ExternalLink, Shield, Zap, Database, Globe, CloudUpload, Github, Languages, Wand2 } from 'lucide-react';
 
 interface FAQModalProps {
     isOpen: boolean;
@@ -65,6 +65,16 @@ export const FAQModal: React.FC<FAQModalProps> = ({ isOpen, onClose, t }) => {
                     </p>
                 </div>
             )
+        },
+        {
+            icon: <Languages className="w-5 h-5 text-pink-400" />,
+            question: t.faq_q6,
+            answer: t.faq_a6
+        },
+        {
+            icon: <Wand2 className="w-5 h-5 text-cyan-400" />,
+            question: t.faq_q7,
+            answer: t.faq_a7
         },
         {
             icon: <CloudUpload className="w-5 h-5 text-orange-400" />,
