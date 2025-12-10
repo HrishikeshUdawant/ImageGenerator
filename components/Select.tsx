@@ -83,7 +83,7 @@ export const Select: React.FC<SelectProps> = ({ label, value, onChange, options,
             {icon && <span className="text-white/40 flex-shrink-0">{icon}</span>}
             <span className="truncate">{selectedOption?.label}</span>
         </div>
-        <ChevronsUpDown className={`text-white/40 w-5 h-5 flex-shrink-0 ml-2 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronsUpDown className="text-white/40 w-5 h-5 flex-shrink-0 ml-2" />
       </button>
 
       <div 
