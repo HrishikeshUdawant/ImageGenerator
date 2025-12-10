@@ -191,7 +191,8 @@ export const generateGiteeImage = async (
           width,
           height,
           seed: finalSeed,
-          num_inference_steps: finalSteps
+          num_inference_steps: finalSteps,
+          response_format: "url"
         })
       });
 
@@ -202,17 +203,13 @@ export const generateGiteeImage = async (
 
       const data = await response.json();
       
-      if (!data.data || !data.data[0] || !data.data[0].b64_json) {
+      if (!data.data || !data.data[0] || !data.data[0].url) {
         throw new Error("error_invalid_response");
       }
 
-      const base64Image = data.data[0].b64_json;
-      const mimeType = data.data[0].type || "image/png";
-      const imageUrl = `data:${mimeType};base64,${base64Image}`;
-
       return {
         id: generateUUID(),
-        url: imageUrl,
+        url: data.data[0].url,
         model,
         prompt,
         aspectRatio,

@@ -401,6 +401,7 @@ export default function App() {
     setImageDimensions(null); 
     setIsComparing(false);
     setTempUpscaledImage(null);
+    setError(null);
   };
 
   const handleDelete = () => {
@@ -417,6 +418,7 @@ export default function App() {
     setShowInfo(false);
     setIsComparing(false);
     setTempUpscaledImage(null);
+    setError(null);
   };
 
   const handleToggleBlur = () => {
@@ -579,7 +581,7 @@ export default function App() {
               <Tooltip content={t.sourceCode} position="bottom">
                   <a
                     href="https://github.com/Amery2010/peinture"
-                    className="flex items-center justify-center p-2 rounded-lg text-white/70 hover:text-pink-400 hover:bg-white/10 transition-all active:scale-95"
+                    className="flex items-center justify-center p-2 rounded-lg text-white/70 hover:text-purple-400 hover:bg-white/10 transition-all active:scale-95"
                     target="_blank"
                   >
                     <Github className="w-5 h-5" />
