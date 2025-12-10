@@ -576,43 +576,41 @@ export default function App() {
           </aside>
 
           {/* Right Column: Preview & Gallery */}
-          <div className="flex-1 flex flex-col overflow-x-hidden">
+          <div className="flex-1 flex flex-col flex-grow overflow-x-hidden">
             
             {/* Main Preview Area */}
-            <div className="relative w-full flex-grow flex flex-col">
-                <PreviewStage 
+            <PreviewStage 
+                currentImage={currentImage}
+                isWorking={isWorking}
+                isTranslating={isTranslating}
+                elapsedTime={elapsedTime}
+                error={error}
+                isComparing={isComparing}
+                tempUpscaledImage={tempUpscaledImage}
+                showInfo={showInfo}
+                setShowInfo={setShowInfo}
+                imageDimensions={imageDimensions}
+                setImageDimensions={setImageDimensions}
+                t={t}
+                copiedPrompt={copiedPrompt}
+                handleCopyPrompt={handleCopyPrompt}
+            >
+                <ImageToolbar 
                     currentImage={currentImage}
-                    isWorking={isWorking}
-                    isTranslating={isTranslating}
-                    elapsedTime={elapsedTime}
-                    error={error}
                     isComparing={isComparing}
-                    tempUpscaledImage={tempUpscaledImage}
                     showInfo={showInfo}
                     setShowInfo={setShowInfo}
-                    imageDimensions={imageDimensions}
-                    setImageDimensions={setImageDimensions}
+                    isUpscaling={isUpscaling}
+                    isDownloading={isDownloading}
+                    handleUpscale={handleUpscale}
+                    handleToggleBlur={handleToggleBlur}
+                    handleDownload={() => currentImage && handleDownload(currentImage.url, `generated-${currentImage.id}`)}
+                    handleDelete={handleDelete}
+                    handleCancelUpscale={handleCancelUpscale}
+                    handleApplyUpscale={handleApplyUpscale}
                     t={t}
-                    copiedPrompt={copiedPrompt}
-                    handleCopyPrompt={handleCopyPrompt}
-                >
-                    <ImageToolbar 
-                        currentImage={currentImage}
-                        isComparing={isComparing}
-                        showInfo={showInfo}
-                        setShowInfo={setShowInfo}
-                        isUpscaling={isUpscaling}
-                        isDownloading={isDownloading}
-                        handleUpscale={handleUpscale}
-                        handleToggleBlur={handleToggleBlur}
-                        handleDownload={() => currentImage && handleDownload(currentImage.url, `generated-${currentImage.id}`)}
-                        handleDelete={handleDelete}
-                        handleCancelUpscale={handleCancelUpscale}
-                        handleApplyUpscale={handleApplyUpscale}
-                        t={t}
-                    />
-                </PreviewStage>
-            </div>
+                />
+            </PreviewStage>
 
             {/* Gallery Strip */}
             <HistoryGallery 

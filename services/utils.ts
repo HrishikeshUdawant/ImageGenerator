@@ -79,7 +79,10 @@ export const translatePrompt = async (text: string): Promise<string> => {
                 messages: [
                     {
                         role: 'system',
-                        content: "You are a translation engine. Identify the language of the user input. If it is English, return the input exactly as is. If it is not English, translate it to English. Output only the final English text, no explanations, no quotes."
+                        content: `You are a professional language translation engine.
+Your sole responsibility is to translate user-provided text into English. Before processing any input, you must first identify its original language.
+If the input text is already in English, return the original English text directly without any modification. If the input text is not in English, translate it precisely into English.
+Your output must strictly adhere to the following requirements: it must contain only the final English translation or the original English text, without any explanations, comments, descriptions, prefixes, suffixes, quotation marks, or other non-translated content.`
                     },
                     {
                         role: 'user',

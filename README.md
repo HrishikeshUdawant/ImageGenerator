@@ -17,7 +17,7 @@ A sleek, dark-themed AI image generator built with React, TypeScript, and Tailwi
   - Gitee AI: `Z-Image Turbo`, `Qwen Image`, `FLUX.1 Schnell`, `FLUX.1 Krea`, `FLUX.1 Dev`
   - Model Scope: `Z-Image Turbo`, `FLUX.2`, `FLUX.1 Krea`, `FLUX.1`
 - **Auto Translation**: Intelligent detection and translation of non-English prompts to optimize performance for English-centric models like **FLUX**.
-- **Prompt Optimization**: Integrated AI prompt enhancer that expands simple ideas into detailed, cinematic descriptions (powered by Pollinations.ai for HF, DeepSeek for Gitee AI and Model Scope).
+- **Prompt Optimization**: Integrated AI prompt enhancer that expands simple ideas into detailed, cinematic descriptions (powered by Pollinations.ai for Hugging Face, DeepSeek for Gitee AI and Model Scope).
 - **Advanced Controls**: Fine-tune your creations with adjustable **inference steps**, **seed control**, **guidance scale** (for Flux), and **HD Mode** (High Definition).
 - **History Gallery**: Automatically saves generated images locally. View, zoom, pan, and manage your creation history.
 - **4x Resolution**: AI upscaling technology to increase image resolution up to 4x (Only supported on Hugging Face).

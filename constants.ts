@@ -44,7 +44,7 @@ export const getModelConfig = (provider: ProviderOption, model: ModelOption) => 
   if (provider === 'gitee') {
     if (model === 'z-image-turbo') return { min: 1, max: 20, default: 9 };
     if (model === 'Qwen-Image') return { min: 4, max: 50, default: 20 };
-    if (model === 'flux-1-schnell') return { min: 1, max: 50, default: 4 };
+    if (model === 'flux-1-schnell') return { min: 1, max: 50, default: 8 };
     if (model === 'FLUX_1-Krea-dev') return { min: 1, max: 50, default: 20 };
     if (model === 'FLUX.1-dev') return { min: 1, max: 50, default: 20 };
   } else if (provider === 'modelscope') {
@@ -54,7 +54,7 @@ export const getModelConfig = (provider: ProviderOption, model: ModelOption) => 
     if (model === 'MusePublic/489_ckpt_FLUX_1') return { min: 1, max: 50, default: 24 };
   } else {
     if (model === 'z-image-turbo') return { min: 1, max: 20, default: 9 };
-    if (model === 'flux-1-schnell') return { min: 1, max: 50, default: 4 };
+    if (model === 'flux-1-schnell') return { min: 1, max: 50, default: 8 };
     if (model === 'qwen-image-fast') return { min: 4, max: 28, default: 8 };
     if (model === 'ovis-image') return { min: 1, max: 50, default: 24 };
   }
