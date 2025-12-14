@@ -225,6 +225,7 @@ export default function App() {
                 if (relevantUpdate) {
                      if (relevantUpdate.status === 'success' && relevantUpdate.videoUrl) {
                         setCurrentImage(prev => prev ? { ...prev, videoStatus: 'success', videoUrl: relevantUpdate.videoUrl } : null);
+                        setIsLiveMode(true);
                      } else if (relevantUpdate.status === 'failed') {
                         setCurrentImage(prev => prev ? { ...prev, videoStatus: 'failed', videoError: relevantUpdate.error || 'Video generation failed' } : null);
                         setError(relevantUpdate.error || 'Video generation failed');
@@ -271,14 +272,13 @@ export default function App() {
   // Initial Selection Effect
   useEffect(() => {
     if (!currentImage && history.length > 0) {
-      setCurrentImage(history[0]);
+      const firstImg = history[0];
+      setCurrentImage(firstImg);
+      if (firstImg.videoUrl && firstImg.videoStatus === 'success') {
+          setIsLiveMode(true);
+      }
     }
   }, [history.length]); 
-
-  // Reset live mode when image changes
-  useEffect(() => {
-      setIsLiveMode(false);
-  }, [currentImage?.id]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -473,7 +473,12 @@ export default function App() {
     setImageDimensions(null); 
     setIsComparing(false);
     setTempUpscaledImage(null);
-    setIsLiveMode(false);
+    // Automatically switch to Live Mode if video is available
+    if (image.videoUrl && image.videoStatus === 'success') {
+        setIsLiveMode(true);
+    } else {
+        setIsLiveMode(false);
+    }
     setError(null);
   };
 
@@ -481,16 +486,24 @@ export default function App() {
     if (!currentImage) return;
     const newHistory = history.filter(img => img.id !== currentImage.id);
     setHistory(newHistory);
-    if (newHistory.length > 0) {
-      setCurrentImage(newHistory[0]);
-    } else {
-      setCurrentImage(null);
-    }
+    
     setShowInfo(false);
     setIsComparing(false);
     setTempUpscaledImage(null);
-    setIsLiveMode(false);
     setError(null);
+
+    if (newHistory.length > 0) {
+      const nextImg = newHistory[0];
+      setCurrentImage(nextImg);
+      if (nextImg.videoUrl && nextImg.videoStatus === 'success') {
+          setIsLiveMode(true);
+      } else {
+          setIsLiveMode(false);
+      }
+    } else {
+      setCurrentImage(null);
+      setIsLiveMode(false);
+    }
   };
 
   const handleToggleBlur = () => {
@@ -577,6 +590,10 @@ export default function App() {
               setHistory(prev => prev.map(img => img.id === successImage.id ? successImage : img));
               // Update current if user hasn't switched away
               setCurrentImage(prev => (prev && prev.id === successImage.id) ? successImage : prev);
+              
+              if (currentImageRef.current?.id === successImage.id) {
+                  setIsLiveMode(true);
+              }
           }
 
       } catch (e: any) {
