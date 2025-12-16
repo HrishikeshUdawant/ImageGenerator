@@ -141,7 +141,7 @@ const getDimensions = (ratio: AspectRatioOption, enableHD: boolean, model: Model
   if (!enableHD) return base;
 
   let multiplier = 2; // Default multiplier for Z-Image Turbo
-  if (['flux-1-schnell', 'FLUX_1-Krea-dev', 'FLUX.1-dev'].includes(model)) {
+  if (['flux-1-schnell', 'FLUX_1-Krea-dev', 'FLUX.1-dev', 'FLUX.2-dev'].includes(model)) {
       multiplier = 1.5;
   }
 
