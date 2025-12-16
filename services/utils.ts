@@ -64,6 +64,59 @@ export const saveOptimizationModel = (provider: string, model: string) => {
   }
 };
 
+// --- Video Settings Management ---
+
+export interface VideoSettings {
+  prompt: string;
+  duration: number; // in seconds
+  steps: number;
+  guidance: number;
+}
+
+export const DEFAULT_VIDEO_SETTINGS: Record<string, VideoSettings> = {
+  huggingface: {
+    prompt: "make this image come alive, cinematic motion, smooth animation",
+    duration: 3,
+    steps: 6,
+    guidance: 1
+  },
+  gitee: {
+    prompt: "make this image come alive, cinematic motion, smooth animation",
+    duration: 3,
+    steps: 10,
+    guidance: 4
+  },
+  modelscope: {
+    prompt: "make this image come alive, cinematic motion, smooth animation",
+    duration: 3,
+    steps: 10,
+    guidance: 4
+  }
+};
+
+const VIDEO_SETTINGS_STORAGE_PREFIX = 'video_settings_';
+
+export const getVideoSettings = (provider: string): VideoSettings => {
+  const defaults = DEFAULT_VIDEO_SETTINGS[provider] || DEFAULT_VIDEO_SETTINGS['huggingface'];
+  if (typeof localStorage === 'undefined') return defaults;
+  
+  try {
+    const raw = localStorage.getItem(VIDEO_SETTINGS_STORAGE_PREFIX + provider);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw);
+    // Ensure all keys exist by merging with defaults
+    return { ...defaults, ...parsed };
+  } catch {
+    return defaults;
+  }
+};
+
+export const saveVideoSettings = (provider: string, settings: VideoSettings) => {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(VIDEO_SETTINGS_STORAGE_PREFIX + provider, JSON.stringify(settings));
+  }
+};
+
 // --- Translation Service ---
 
 const POLLINATIONS_API_URL = "https://text.pollinations.ai/openai";
