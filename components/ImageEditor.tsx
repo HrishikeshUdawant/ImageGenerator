@@ -23,7 +23,7 @@ import {
     ChevronDown
 } from 'lucide-react';
 import { Tooltip } from './Tooltip';
-import { editImageQwen } from '../services/hfService';
+import { editImageQwen, uploadToGradio } from '../services/hfService';
 import { editImageGitee } from '../services/giteeService';
 import { editImageMS } from '../services/msService';
 import { ProviderOption } from '../types';
@@ -131,6 +131,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         reader.onload = (event) => {
             if (event.target?.result) {
                 const img = new Image();
+                // Ensure cross-origin handling for subsequent canvas operations
+                img.crossOrigin = 'anonymous';
                 img.onload = () => {
                     setImage(img);
                     
@@ -655,19 +657,30 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             if (provider === 'gitee') {
                 result = await editImageGitee(imageBlobs, finalPrompt);
             } else if (provider === 'modelscope') {
-                // Model Scope Qwen-Image-Edit-2509 parameters mapping
                 result = await editImageMS(imageBlobs, finalPrompt);
             } else {
                 result = await editImageQwen(imageBlobs, finalPrompt, normalizedWidth, normalizedHeight);
             }
 
-            const response = await fetch(result.url, { mode: 'no-cors' })
-            const blob = await response.blob()
-            
-            const imgFile = new File([blob], "edited_image.png", { type: "image/png" });
+            if (provider === 'modelscope') {
+                const link = document.createElement('a');
+                link.href = result.url;
+                link.download = `edited_image_${Date.now()}.png`;
+                link.click();
 
-            handleExit();
-            processFile(imgFile);
+                handleExit();
+            } else {
+                const response = await fetch(result.url)
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch generated image from ${result.url}: ${response.statusText}`);
+                }
+                const blob = await response.blob()
+                const imgFile = new File([blob], "edited_image.png", { type: "image/png" });
+
+                handleExit();
+                processFile(imgFile);
+            }
+            
             setIsGenerating(false);
         } catch (e: any) {
             console.error(e);
