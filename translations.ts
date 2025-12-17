@@ -132,6 +132,8 @@ export const translations = {
     faq_a7: "We use powerful LLMs to expand your short ideas into detailed, artistically rich prompts. Depending on the provider, we use models like DeepSeek or OpenAI. You can customize the 'Role Setting' in the Settings menu to control how the AI rewrites your prompts.",
     faq_q8: "How does Live Image work?",
     faq_a8: "The Live feature transforms static images into dynamic short videos. By leveraging advanced Image-to-Video models (such as Wan2.2), the AI analyzes the scene's composition to generate natural motion and cinematic effects, bringing your creation to life. Currently, only Hugging Face and Gitee AI are supported.",
+    faq_q9: "How does the Image Editor work?",
+    faq_a9: "The Image Editor allows you to modify existing images using AI. You can draw on a transparent layer (using Brush or Rectangle tools) to indicate where you want changes, then provide an AI command. The system merges your drawings with the original image and sends them to the Qwen-Image-Edit model. You can also upload up to 3 reference images to guide the AI's artistic style or content.",
     footer_license: "Released under the MIT License. Open source and free forever.",
 
     // Aspect Ratios
@@ -316,6 +318,8 @@ export const translations = {
     faq_a7: "我们使用强大的 LLM 将您简短的想法扩展为详细、富有艺术感的提示词。根据服务商的不同，我们会调用 DeepSeek 或 OpenAI 等模型。您可以在“设置”菜单的“提示词”选项卡中自定义“角色设定”，以控制 AI 重写提示词的方式。",
     faq_q8: "Live 图生成原理是什么？",
     faq_a8: "Live 功能利用先进的图生视频模型（如 Wan2.2），将静态图片转化为动态短视频。AI 会分析画面构图，生成自然的运动轨迹和电影级特效，赋予您的作品生命力。目前仅 Hugging Face 与 Gitee AI 支持。",
+    faq_q9: "图片编辑功能是如何工作的？",
+    faq_a9: "图片编辑器允许您利用 AI 修改现有图片。您可以在透明图层上绘画（使用画笔或矩形工具）来标注想要修改的区域，然后输入 AI 指令。系统会将您的涂鸦与原图合并，并发送给 Qwen-Image-Edit 模型进行处理。您还可以上传最多 3 张参考图，以引导 AI 的艺术风格或内容生成。",
     footer_license: "基于 MIT 协议发布。永久开源免费。",
 
     // Aspect Ratios

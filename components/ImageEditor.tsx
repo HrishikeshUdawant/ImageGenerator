@@ -711,7 +711,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
             }
             
-            handleExit();
+            // handleExit();
             setIsGenerating(false);
         } catch (e: any) {
             console.error(e);
