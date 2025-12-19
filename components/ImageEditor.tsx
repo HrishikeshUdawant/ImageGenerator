@@ -25,14 +25,17 @@ import {
     LoaderCircle,
     Clock,
     History,
-    Paintbrush
+    Paintbrush,
+    CloudUpload,
+    Cloud
 } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { editImageQwen } from '../services/hfService';
 import { editImageGitee } from '../services/giteeService';
 import { editImageMS } from '../services/msService';
 import { optimizeEditPrompt } from '../services/utils';
-import { ProviderOption, GeneratedImage } from '../types';
+import { isStorageConfigured, listCloudFiles, fetchCloudBlob, getStorageType } from '../services/storageService';
+import { ProviderOption, GeneratedImage, CloudFile } from '../types';
 import { PROVIDER_OPTIONS } from '../constants';
 import { ImageComparison } from './ImageComparison';
 
@@ -42,11 +45,13 @@ interface ImageEditorProps {
     setProvider: (p: ProviderOption) => void;
     onOpenSettings: () => void;
     history: GeneratedImage[];
+    handleUploadToS3?: (blob: Blob, fileName: string, metadata?: any) => Promise<void>;
+    isUploading?: boolean;
 }
 
 type ToolType = 'select' | 'move' | 'brush' | 'eraser' | 'rect';
 
-export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvider, onOpenSettings, history }) => {
+export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvider, onOpenSettings, history, handleUploadToS3, isUploading }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const snapshotRef = useRef<ImageData | null>(null);
@@ -63,11 +68,98 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     const [showExitDialog, setShowExitDialog] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [showGalleryModal, setShowGalleryModal] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [showProviderMenu, setShowProviderMenu] = useState(false);
     const [generatedResult, setGeneratedResult] = useState<string | null>(null);
     const [elapsedTime, setElapsedTime] = useState(0);
     const [isOptimizing, setIsOptimizing] = useState(false);
+    
+    // NSFW State
+    const [isSourceNSFW, setIsSourceNSFW] = useState(false);
+    
+    // Gallery State
+    const [galleryFiles, setGalleryFiles] = useState<CloudFile[]>([]);
+    const [galleryLoading, setGalleryLoading] = useState(false);
+    const [galleryLimit, setGalleryLimit] = useState(20);
+    const [galleryLocalUrls, setGalleryLocalUrls] = useState<Record<string, string>>({});
+
+    // Storage Check
+    const [isStorageEnabled, setIsStorageEnabled] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
+
+    useEffect(() => {
+        const checkStorage = () => {
+            setIsStorageEnabled(isStorageConfigured());
+        };
+        checkStorage();
+        window.addEventListener('storage', checkStorage);
+        const interval = setInterval(checkStorage, 2000);
+        return () => {
+            window.removeEventListener('storage', checkStorage);
+            clearInterval(interval);
+        };
+    }, []);
+
+    // Load Gallery Files when modal opens
+    useEffect(() => {
+        if (showGalleryModal && isStorageEnabled) {
+            const loadGallery = async () => {
+                setGalleryLoading(true);
+                try {
+                    const files = await listCloudFiles();
+                    // Filter images only and sort by date
+                    const images = files
+                        .filter(f => f.type === 'image')
+                        .sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+                    setGalleryFiles(images);
+                } catch (e) {
+                    console.error("Failed to load gallery files", e);
+                } finally {
+                    setGalleryLoading(false);
+                }
+            };
+            loadGallery();
+        }
+    }, [showGalleryModal, isStorageEnabled]);
+
+    // WebDAV Preloading Logic for Gallery Modal (Consistent with CloudGallery)
+    useEffect(() => {
+        if (!showGalleryModal || getStorageType() !== 'webdav') return;
+        
+        let isCancelled = false;
+        const visibleFiles = galleryFiles.slice(0, galleryLimit);
+
+        const loadImagesSequentially = async () => {
+            for (const file of visibleFiles) {
+                if (isCancelled) break;
+                if (galleryLocalUrls[file.key]) continue;
+
+                try {
+                    const blob = await fetchCloudBlob(file.url);
+                    if (!isCancelled) {
+                        const url = URL.createObjectURL(blob);
+                        setGalleryLocalUrls(prev => ({ ...prev, [file.key]: url }));
+                    }
+                } catch (e) {
+                    console.error("Failed to load WebDAV image", file.key, e);
+                }
+            }
+        };
+
+        if (visibleFiles.length > 0) {
+            loadImagesSequentially();
+        }
+
+        return () => { isCancelled = true; };
+    }, [showGalleryModal, galleryFiles, galleryLimit]);
+
+    // Cleanup ObjectURLs on unmount
+    useEffect(() => {
+        return () => {
+            Object.values(galleryLocalUrls).forEach(url => URL.revokeObjectURL(url));
+        };
+    }, []);
 
     // Context Menu State
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
@@ -135,11 +227,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     
     const saveToHistory = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
         const imageData = ctx.getImageData(0, 0, width, height);
-        // If we are in the middle of history, discard future states
         const newHistory = historyStates.slice(0, historyIndex + 1);
         newHistory.push(imageData);
-        
-        // Limit history size to 20
         if (newHistory.length > 20) {
             newHistory.shift();
         } else {
@@ -170,48 +259,32 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         }
     }, [historyStates, historyIndex]);
 
-    // --- Image Loading Logic ---
-
     const processFile = useCallback((file: File) => {
         if (!file.type.startsWith('image/')) return;
-        
+        setIsSourceNSFW(file.name.toUpperCase().includes('.NSFW'));
         const reader = new FileReader();
         reader.onload = (event) => {
             if (event.target?.result) {
                 const img = new Image();
-                // Ensure cross-origin handling for subsequent canvas operations
                 img.crossOrigin = 'anonymous';
                 img.onload = () => {
                     setImage(img);
                     setGeneratedResult(null);
-                    
                     if (canvasRef.current && containerRef.current) {
                          canvasRef.current.width = img.width;
                          canvasRef.current.height = img.height;
-                         
                          const ctx = canvasRef.current.getContext('2d');
                          if (ctx) {
-                             // Clear canvas (drawing layer)
                              ctx.clearRect(0, 0, img.width, img.height);
-                             
-                             // Initialize history with empty/transparent state
                              const initialData = ctx.getImageData(0, 0, img.width, img.height);
                              setHistoryStates([initialData]); 
                              setHistoryIndex(0);
                          }
-
-                         // Calculate Scale to Fit
                          const { width: contW, height: contH } = containerRef.current.getBoundingClientRect();
-                         
                          const scaleH = contH / img.height;
                          const scaleW = contW / img.width;
-                         
-                         // Fit to container (Contain), but DO NOT upscale if image is smaller than container
                          const newScale = Math.min(scaleH, scaleW, 1);
-                         
                          setScale(newScale);
-
-                         // Center Image using the new scale
                          setOffset({
                              x: (contW - img.width * newScale) / 2,
                              y: (contH - img.height * newScale) / 2
@@ -227,68 +300,67 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             processFile(e.target.files[0]);
-            // Clear input so same file can be selected again
             e.target.value = '';
         }
     };
 
-    const handleHistorySelect = (historyItem: GeneratedImage) => {
+    const loadEditorImage = (url: string) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
             setImage(img);
-            // Reset previous generation state
             setGeneratedResult(null);
             setCommand('');
             setAttachedImages([]);
-            
             if (canvasRef.current && containerRef.current) {
                  canvasRef.current.width = img.width;
                  canvasRef.current.height = img.height;
-                 
                  const ctx = canvasRef.current.getContext('2d');
                  if (ctx) {
-                     // Clear canvas (drawing layer)
                      ctx.clearRect(0, 0, img.width, img.height);
-                     
-                     // Initialize history with empty/transparent state
                      try {
                         const initialData = ctx.getImageData(0, 0, img.width, img.height);
                         setHistoryStates([initialData]); 
                         setHistoryIndex(0);
                      } catch (e) {
                         console.error("Failed to read image data (CORS restriction):", e);
-                        // Reset history if we can't read it
                         setHistoryStates([]);
                         setHistoryIndex(-1);
                      }
                  }
-
-                 // Calculate Scale to Fit
                  const { width: contW, height: contH } = containerRef.current.getBoundingClientRect();
-                 
                  const scaleH = contH / img.height;
                  const scaleW = contW / img.width;
-                 
-                 // Fit to container (Contain), but DO NOT upscale if image is smaller than container
                  const newScale = Math.min(scaleH, scaleW, 1);
-                 
                  setScale(newScale);
-
-                 // Center Image using the new scale
                  setOffset({
                      x: (contW - img.width * newScale) / 2,
                      y: (contH - img.height * newScale) / 2
                  });
             }
-            setShowHistoryModal(false);
         };
         img.onerror = () => {
-            console.error("Failed to load history image via proxy:", historyItem.url);
-            // Fallback to direct load might be an option, but sticking to proxy as primary means to fix CORS
+            console.error("Failed to load image via proxy:", url);
+            // If proxy fails and it's not a blob, try direct
+            if (url.includes('i0.wp.com')) {
+                // Should handle better, but for now log
+            }
         };
-        // Use Proxy URL
-        img.src = getProxyUrl(historyItem.url);
+        img.src = getProxyUrl(url);
+    };
+
+    const handleHistorySelect = (historyItem: GeneratedImage) => {
+        setIsSourceNSFW(!!historyItem.isBlurred);
+        loadEditorImage(historyItem.url);
+        setShowHistoryModal(false);
+    };
+
+    const handleGallerySelect = (file: CloudFile) => {
+        setIsSourceNSFW(file.key.toUpperCase().includes('.NSFW'));
+        // Use local blob URL if available (WebDAV), otherwise use file.url directly
+        const urlToUse = galleryLocalUrls[file.key] || file.url;
+        loadEditorImage(urlToUse);
+        setShowGalleryModal(false);
     };
 
     const handleExit = () => {
@@ -299,11 +371,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         setAttachedImages([]);
         setScale(1);
         setOffset({ x: 0, y: 0 });
+        setIsSourceNSFW(false);
         setShowExitDialog(false);
         setGeneratedResult(null);
     };
 
-    // --- Zoom Helpers ---
     const zoomIn = useCallback(() => {
         if (!containerRef.current) return;
         const newScale = Math.min(scale * 1.1, 10);
@@ -321,7 +393,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
              const { width: contW, height: contH } = containerRef.current.getBoundingClientRect();
              const scaleH = contH / image.height;
              const scaleW = contW / image.width;
-             // Ensure we don't upscale on reset either
              const newScale = Math.min(scaleH, scaleW, 1);
              setScale(newScale);
              setOffset({
@@ -334,7 +405,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         }
     }, [image]);
 
-    // Centering without changing scale
     const handleCenterView = () => {
         if (image && containerRef.current) {
             const { width: contW, height: contH } = containerRef.current.getBoundingClientRect();
@@ -346,34 +416,27 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         setContextMenu(null);
     };
 
-    // --- Keyboard Shortcuts ---
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const isMod = isMac ? e.metaKey : e.altKey;
-            
-            // Allow typing in text inputs without triggering shortcuts
             const target = e.target as HTMLElement;
             if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
                 if (e.key === 'Enter' && e.shiftKey) {
                     e.preventDefault();
-                    // Generate logic handled by button or specific handler
                 }
                 return;
             }
-
             if (e.key === 'Escape') {
                 if (generatedResult) setGeneratedResult(null);
                 else if (contextMenu) setContextMenu(null);
                 else if (showShortcuts) setShowShortcuts(false);
                 else if (showHistoryModal) setShowHistoryModal(false);
+                else if (showGalleryModal) setShowGalleryModal(false);
                 else if (showExitDialog) setShowExitDialog(false);
                 else if (image) setShowExitDialog(true);
                 return;
             }
-
             const key = e.key.toLowerCase();
-
-            // Mod+ Shortcuts
             if (isMod) {
                 switch(key) {
                     case '0':
@@ -387,57 +450,34 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                         break;
                 }
             } 
-            
-            // Single Key or Shift Shortcuts (No Mod needed or handled above)
             switch(e.key) {
                 case '+':
-                case '=': // Often = is the same key as +
-                    if (!isMod) { // Zoom in can be just +
-                         e.preventDefault();
-                         zoomIn();
-                    }
+                case '=':
+                    if (!isMod) { e.preventDefault(); zoomIn(); }
                     break;
                 case '-':
-                    if (!isMod) { // Zoom out can be just -
-                         e.preventDefault();
-                         zoomOut();
-                    }
+                    if (!isMod) { e.preventDefault(); zoomOut(); }
                     break;
                 case '0':
-                    if (!isMod) {
-                        e.preventDefault();
-                        setActiveTool(prev => prev === 'move' ? 'select' : 'move');
-                    }
+                    if (!isMod) { e.preventDefault(); setActiveTool(prev => prev === 'move' ? 'select' : 'move'); }
                     break;
                 case 'm':
                 case 'M':
-                    if (!isMod) {
-                         e.preventDefault();
-                         setActiveTool(prev => prev === 'move' ? 'select' : 'move');
-                    }
+                    if (!isMod) { e.preventDefault(); setActiveTool(prev => prev === 'move' ? 'select' : 'move'); }
                     break;
                 case 'd':
                 case 'D':
                 case '1':
-                    if (!isMod) {
-                        e.preventDefault();
-                        setActiveTool('brush');
-                    }
+                    if (!isMod) { e.preventDefault(); setActiveTool('brush'); }
                     break;
                 case 'r':
                 case 'R':
                 case '2':
-                    if (!isMod) {
-                        e.preventDefault();
-                        setActiveTool('rect');
-                    }
+                    if (!isMod) { e.preventDefault(); setActiveTool('rect'); }
                     break;
                 case 'e':
                 case '3':
-                    if (!isMod) {
-                        e.preventDefault();
-                        setActiveTool('eraser');
-                    }
+                    if (!isMod) { e.preventDefault(); setActiveTool('eraser'); }
                     break;
                 case 'c':
                 case 'C':
@@ -450,12 +490,10 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                      break;
             }
         };
-
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isMac, zoomIn, zoomOut, zoomReset, handleUndo, handleRedo, image, showExitDialog, showShortcuts, showHistoryModal, contextMenu, generatedResult]);
+    }, [isMac, zoomIn, zoomOut, zoomReset, handleUndo, handleRedo, image, showExitDialog, showShortcuts, showHistoryModal, showGalleryModal, contextMenu, generatedResult]);
 
-    // Drag & Drop Handlers
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -477,7 +515,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         }
     };
 
-    // Global Paste Handler
     useEffect(() => {
         const handlePaste = (e: ClipboardEvent) => {
             if (e.clipboardData && e.clipboardData.files.length > 0) {
@@ -492,22 +529,17 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         return () => window.removeEventListener('paste', handlePaste);
     }, [processFile]);
 
-    // --- Drawing Logic ---
-
     const getCanvasCoordinates = (e: React.MouseEvent | React.TouchEvent) => {
         if (!canvasRef.current) return { x: 0, y: 0 };
         const rect = canvasRef.current.getBoundingClientRect();
-        
         const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
         const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-
         return {
             x: (clientX - rect.left) * (canvasRef.current.width / rect.width),
             y: (clientY - rect.top) * (canvasRef.current.height / rect.height)
         };
     };
 
-    // Helper to get visual line width based on current scale
     const getDynamicLineWidth = (baseSize: number) => {
         return baseSize / scale;
     };
@@ -517,9 +549,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         if (!canvasRef.current) return;
         const ctx = canvasRef.current.getContext('2d');
         if (!ctx) return;
-
         const coords = getCanvasCoordinates(e);
-
         if (activeTool === 'move') {
             setIsDragging(true);
             const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
@@ -527,11 +557,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             setLastPosition({ x: clientX, y: clientY });
         } else if (['brush', 'eraser', 'rect'].includes(activeTool)) {
             setIsDrawing(true);
-            
-            // Common settings
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-
             if (activeTool === 'brush') {
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.lineWidth = getDynamicLineWidth(2); 
@@ -540,7 +567,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 ctx.moveTo(coords.x, coords.y);
             } else if (activeTool === 'eraser') {
                 ctx.globalCompositeOperation = 'destination-out';
-                ctx.lineWidth = getDynamicLineWidth(16); // Increased eraser size (4x)
+                ctx.lineWidth = getDynamicLineWidth(16); 
                 ctx.beginPath();
                 ctx.moveTo(coords.x, coords.y);
             } else if (activeTool === 'rect') {
@@ -548,7 +575,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 ctx.lineWidth = getDynamicLineWidth(2);
                 ctx.strokeStyle = systemColor;
                 setStartPosition(coords);
-                // Save snapshot for drag preview
                 snapshotRef.current = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
             }
         }
@@ -556,29 +582,22 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
 
     const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
         if (!canvasRef.current) return;
-        
         if (isDragging && activeTool === 'move') {
             const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
             const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-            
             const dx = clientX - lastPosition.x;
             const dy = clientY - lastPosition.y;
-            
             setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
             setLastPosition({ x: clientX, y: clientY });
         } else if (isDrawing) {
              const ctx = canvasRef.current.getContext('2d');
              if (!ctx) return;
-             
              const coords = getCanvasCoordinates(e);
-
              if (['brush', 'eraser'].includes(activeTool)) {
                  ctx.lineTo(coords.x, coords.y);
                  ctx.stroke();
              } else if (activeTool === 'rect' && snapshotRef.current) {
-                 // Restore snapshot to clear previous rect frame
                  ctx.putImageData(snapshotRef.current, 0, 0);
-                 
                  const width = coords.x - startPosition.x;
                  const height = coords.y - startPosition.y;
                  ctx.strokeRect(startPosition.x, startPosition.y, width, height);
@@ -596,8 +615,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 if (['brush', 'eraser'].includes(activeTool)) {
                      ctx.closePath();
                 }
-                // Save state after any drawing operation
-                ctx.globalCompositeOperation = 'source-over'; // Reset
+                ctx.globalCompositeOperation = 'source-over'; 
                 saveToHistory(ctx, canvasRef.current.width, canvasRef.current.height);
                 snapshotRef.current = null;
             }
@@ -606,7 +624,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
 
     const handleTouchStart = (e: React.TouchEvent) => {
         if (e.touches.length === 2) {
-            // Pinch to zoom Logic
             e.preventDefault();
             const dist = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
@@ -620,7 +637,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
 
     const handleTouchMove = (e: React.TouchEvent) => {
         if (e.touches.length === 2 && lastTouchDistance.current && containerRef.current) {
-            // Pinch to zoom Logic
             e.preventDefault();
             const dist = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
@@ -628,16 +644,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             );
             const delta = dist / lastTouchDistance.current;
             const newScale = Math.min(Math.max(0.1, scale * delta), 10);
-            
-            // Zoom center logic based on touch midpoint
             const rect = containerRef.current.getBoundingClientRect();
             const touchCx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
             const touchCy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
-
-            // Adjust offset to zoom into the midpoint
             const newOffsetX = touchCx - (touchCx - offset.x) * (newScale / scale);
             const newOffsetY = touchCy - (touchCy - offset.y) * (newScale / scale);
-
             setScale(newScale);
             setOffset({ x: newOffsetX, y: newOffsetY });
             lastTouchDistance.current = dist;
@@ -648,21 +659,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
 
     const handleWheel = (e: React.WheelEvent) => {
         e.preventDefault(); 
-        e.stopPropagation(); // Stop propagation to prevent browser scaling
+        e.stopPropagation(); 
         if (!containerRef.current) return;
-
         const rect = containerRef.current.getBoundingClientRect();
         const cx = rect.width / 2;
         const cy = rect.height / 2;
-
         const delta = e.deltaY > 0 ? 0.95 : 1.05;
         const newScale = Math.min(Math.max(0.1, scale * delta), 10);
-
-        // Calculate new offset to maintain center focus
-        // newOffset = center - (center - oldOffset) * (newScale / oldScale)
         const newOffsetX = cx - (cx - offset.x) * (newScale / scale);
         const newOffsetY = cy - (cy - offset.y) * (newScale / scale);
-
         setScale(newScale);
         setOffset({ x: newOffsetX, y: newOffsetY });
     };
@@ -674,10 +679,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         }
     };
 
-    // --- Utility: Convert to Blob ---
-    
     const urlToBlob = async (url: string): Promise<Blob> => {
-        // Use proxy for internal operations too if it's a remote URL
         const fetchUrl = getProxyUrl(url);
         const response = await fetch(fetchUrl);
         return await response.blob();
@@ -705,36 +707,28 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         return new Blob([u8arr], {type:mime});
     };
 
-        // --- Dimension Constraints ---
     const scaleToConstraints = (w: number, h: number, maxVal: number = 2048) => {
         let width = w;
         let height = h;
         const MAX = maxVal;
         const MIN = 256;
-
-        // Scale down if too large
         if (width > MAX || height > MAX) {
             const ratio = Math.min(MAX / width, MAX / height);
             width = Math.floor(width * ratio);
             height = Math.floor(height * ratio);
         }
-        // Ensure not too small
         if (width < MIN || height < MIN) {
             const ratio = Math.max(MIN / width, MIN / height);
             width = Math.ceil(width * ratio);
             height = Math.ceil(height * ratio);
         }
-        
-        // Snap to nearest multiple of 8 and clamp
         const normalize = (v: number) => Math.floor(v / 8) * 8;
-
         return {
             width: normalize(width),
             height: normalize(height),
         };
     };
 
-    // --- Command Bar Attachment ---
     const handleRefImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             if (attachedImages.length >= 3) return;
@@ -750,10 +744,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     };
 
     const removeAttachedImage = (index: number) => {
-        setAttachedImages(prev => prev.filter((_, i) => i !== index));
+        setAttachedImages(prev => [...prev].filter((_, i) => i !== index));
     };
-
-    // --- Generation Logic ---
 
     const getMergedLayer = (): HTMLCanvasElement | null => {
         if (!image || !canvasRef.current) return null;
@@ -762,38 +754,30 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         canvas.height = image.naturalHeight;
         const ctx = canvas.getContext('2d');
         if (!ctx) return null;
-        
-        // Draw background
         ctx.drawImage(image, 0, 0);
-        // Draw drawing layer (canvasRef)
         ctx.drawImage(canvasRef.current, 0, 0);
-        
         return canvas;
     }
 
     const handleDownloadResult = async (url: string) => {
+        setIsDownloading(true);
         let fileName = `edited_image_${Date.now()}`;
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
         try {
-            const fetchUrl = getProxyUrl(url); // Use proxy for download too to avoid CORS on fetch
+            const fetchUrl = getProxyUrl(url); 
             const response = await fetch(fetchUrl, { mode: 'cors' });
             if (!response.ok) throw new Error('Network response was not ok');
             let blob = await response.blob();
-
             if (blob.type.startsWith('image') && (blob.type === 'image/webp' || url.includes('.webp'))) {
-            try {
-                // Create a temp image to draw to canvas
+                try {
                     const img = new Image();
                     img.crossOrigin = "Anonymous";
                     const blobUrl = URL.createObjectURL(blob);
-                    
                     await new Promise((resolve, reject) => {
                         img.onload = resolve;
                         img.onerror = reject;
                         img.src = blobUrl;
                     });
-                    
                     const canvas = document.createElement('canvas');
                     canvas.width = img.naturalWidth;
                     canvas.height = img.naturalHeight;
@@ -813,27 +797,38 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 }
             }
 
-            // Ensure extension matches blob type if missing
-            if (!fileName.includes('.')) {
-                const type = blob.type.split('/')[1] || 'png';
-                fileName = `${fileName}.${type}`;
-            }
+            // --- Filename logic start ---
+            const blobType = blob.type.split('/')[1] || 'png';
+            
+            // Determine if filename already has an extension
+            const hasExtension = fileName.match(/\.[a-zA-Z0-9]+$/);
+            let ext = hasExtension ? hasExtension[0] : `.${blobType}`;
+            let base = hasExtension ? fileName.replace(/\.[a-zA-Z0-9]+$/, '') : fileName;
 
-            // Mobile Share
+            // Inject NSFW suffix if needed
+            if (isSourceNSFW && !base.toUpperCase().endsWith('.NSFW')) {
+                base += '.NSFW';
+            }
+            
+            fileName = base + ext;
+            // --- Filename logic end ---
+
             if (isMobile) {
                 const file = new File([blob], fileName, { type: blob.type });
                 const nav = navigator as any;
                 if (nav.canShare && nav.canShare({ files: [file] })) {
                     try {
                         await nav.share({ files: [file], title: 'Peinture AI Asset' });
+                        setIsDownloading(false);
                         return;
                     } catch (e: any) {
-                        if (e.name === 'AbortError') return;
+                        if (e.name === 'AbortError') {
+                            setIsDownloading(false);
+                            return;
+                        }
                     }
                 }
             }
-
-            // Desktop/Fallback Download (Blob URL via A tag)
             const blobUrl = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = blobUrl;
@@ -842,12 +837,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             link.click();
             document.body.removeChild(link);
             setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
-
         } catch (e) {
             console.error("Download failed, falling back to window.open", e);
             try {
                 const link = document.createElement('a');
-                link.href = url; // Use original URL for direct open if fetch fails
+                link.href = url;
                 link.download = fileName;
                 document.body.appendChild(link);
                 link.click();
@@ -855,6 +849,33 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             } catch (err) {
                 window.open(url, '_blank');
             }
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
+    const onCloudUpload = async () => {
+        if (!generatedResult || !handleUploadToS3) return;
+        try {
+            const blob = await urlToBlob(generatedResult);
+            // Construct metadata object
+            const metadata = {
+                prompt: command,
+                provider: provider,
+                model: 'Qwen-Image-Edit',
+                timestamp: Date.now()
+            };
+            
+            // Generate a filename based on timestamp if none
+            let fileName = `edited-${Date.now()}`;
+            if (isSourceNSFW) {
+                fileName += '.NSFW';
+            }
+            fileName += '.png'; // explicit extension for safety, though upload service handles it too
+
+            await handleUploadToS3(blob, fileName, metadata);
+        } catch (e) {
+            console.error("Failed to prepare blob for upload", e);
         }
     };
 
@@ -862,11 +883,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         if (!image || !command.trim()) return;
         setIsOptimizing(true);
         try {
-            // Get merged image
             const mergedCanvas = getMergedLayer();
             if (!mergedCanvas) throw new Error("Could not get image data");
-
-            // Resize for API efficiency (max 1024px)
             const maxDim = 1024;
             let w = mergedCanvas.width;
             let h = mergedCanvas.height;
@@ -875,7 +893,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 w = Math.round(w * ratio);
                 h = Math.round(h * ratio);
             }
-            
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = w;
             tempCanvas.height = h;
@@ -883,16 +900,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             if(ctx) {
                 ctx.drawImage(mergedCanvas, 0, 0, w, h);
             }
-            
-            const base64 = tempCanvas.toDataURL('image/jpeg', 0.8); // JPEG 80% for speed/size
-
-            // Use the new unified service
+            const base64 = tempCanvas.toDataURL('image/jpeg', 0.8); 
             const optimized = await optimizeEditPrompt(base64, command);
-            
             if (optimized) setCommand(optimized);
         } catch (e) {
             console.error("Command optimization failed", e);
-            // Optional: show toast/alert
         } finally {
             setIsOptimizing(false);
         }
@@ -904,26 +916,19 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             setIsGenerating(false);
             return;
         }
-
         if (!image || !command.trim()) return;
-        
         setIsGenerating(true);
         const controller = new AbortController();
         abortControllerRef.current = controller;
-
         try {        
-            // Dimension constraints
             const maxDimension = 2048;
             const { width, height } = scaleToConstraints(image.naturalWidth, image.naturalHeight, maxDimension);
-
             const hasDrawings = historyIndex > 0;
             const imageBlobs: Blob[] = [];
             let promptSuffix = `\n${t.prompt_original_image}`;
             let currentImageIndexInAPI = 1;
-
             const originalBlob = await urlToBlob(image.src);
             imageBlobs.push(originalBlob);
-
             if (hasDrawings) {
                 const mergedCanvas = getMergedLayer();
                 if (mergedCanvas) {
@@ -934,7 +939,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     promptSuffix += `\n${editLayerDesc}`;
                 }
             }
-
             for (let i = 0; i < attachedImages.length; i++) {
                 const refBlob = dataURLToBlob(attachedImages[i]);
                 imageBlobs.push(refBlob);
@@ -943,9 +947,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 const refDesc = t.prompt_ref_image.replace('{n}', currentImageIndexInAPI.toString()).replace('{i}', refNumInUI.toString());
                 promptSuffix += `\n${refDesc}`;
             }
-
             const finalPrompt = command + promptSuffix;
-            
             let result;
             if (provider === 'gitee') {
                 result = await editImageGitee(imageBlobs, finalPrompt, width, height, 16, 4, controller.signal);
@@ -954,26 +956,20 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             } else {
                 result = await editImageQwen(imageBlobs, finalPrompt, width, height, 4, 1, controller.signal);
             }
-
             setGeneratedResult(result.url);
             setIsGenerating(false);
-
         } catch (e: any) {
             if (e.name === 'AbortError') {
                 console.log('Generation cancelled by user');
                 setIsGenerating(false);
                 return;
             }
-
             console.error(e);
             setIsGenerating(false);
-            
-            // Check for missing token errors and open settings
             const errorMsg = e.message || "";
             if (errorMsg.includes("token_required") || errorMsg.includes("credit") || errorMsg.includes("quota") || errorMsg.includes("token_exhausted")) {
                 onOpenSettings();
             }
-            
             alert((t as any)[e.message] || e.message || "Generation failed");
         } finally {
             abortControllerRef.current = null;
@@ -1010,6 +1006,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         { label: t.sc_exit, combos: [['ESC']] },
     ];
 
+    const visibleGalleryFiles = galleryFiles.slice(0, galleryLimit);
+    const getStorageTypeForGallery = getStorageType();
+
     return (
         <div className="w-full h-full flex flex-grow flex-col md:max-w-7xl md:mx-auto relative animate-in fade-in duration-300">
             {/* Main Editor Area */}
@@ -1022,7 +1021,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     backgroundSize: '20px 20px'
                 }}
             >
-                {/* Loading Overlay - Scoped to Image Area (z-20 is below toolbars z-30) */}
+                {/* ... (rest of the render is same) */}
+                {/* Loading Overlay */}
                 {isGenerating && (
                     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
                         <div className="relative">
@@ -1038,11 +1038,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     </div>
                 )}
 
-                {/* Upload CTA - Only visible when no image */}
                 {!image && (
                     <div  className="absolute z-40 inset-0 flex flex-col items-center justify-center p-6 md:p-12">
                         <div className="w-full max-w-lg space-y-4">
-                            {/* Provider Switcher Dropdown in Upload Area */}
                             <div className="relative">
                                 <button 
                                     onClick={() => setShowProviderMenu(!showProviderMenu)}
@@ -1103,19 +1101,28 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                                 </div>
                             </label>
 
-                            {/* Select from History Button */}
-                            <button
-                                onClick={() => setShowHistoryModal(true)}
-                                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/15 text-white/80 hover:text-white border border-white/10 rounded-xl transition-all shadow-lg active:scale-95"
-                            >
-                                <History className="w-4 h-4" />
-                                <span className="font-medium text-sm">{t.select_from_history}</span>
-                            </button>
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => setShowHistoryModal(true)}
+                                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/15 text-white/80 hover:text-white border border-white/10 rounded-xl transition-all shadow-lg active:scale-95"
+                                >
+                                    <History className="w-4 h-4" />
+                                    <span className="font-medium text-sm">{t.select_from_history}</span>
+                                </button>
+                                {isStorageEnabled && (
+                                    <button
+                                        onClick={() => setShowGalleryModal(true)}
+                                        className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/15 text-white/80 hover:text-white border border-white/10 rounded-xl transition-all shadow-lg active:scale-95"
+                                    >
+                                        <Cloud className="w-4 h-4" />
+                                        <span className="font-medium text-sm">{t.select_from_gallery}</span>
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
 
-                {/* Content Layer - Only visible when image exists */}
                 <div 
                     className={`absolute inset-0 origin-top-left touch-none transition-opacity duration-300 ${image ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                     style={{
@@ -1130,7 +1137,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     onTouchEnd={handleMouseUp}
                     onWheel={handleWheel}
                 >
-                    {/* Background Original Image */}
                     {image && (
                         <img 
                             src={image.src} 
@@ -1140,18 +1146,14 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                             draggable={false}
                         />
                     )}
-                    
-                    {/* Transparent Drawing Canvas */}
                     <canvas 
                         ref={canvasRef}
                         className={`relative z-10 ${activeTool === 'move' ? 'cursor-grab active:cursor-grabbing' : (activeTool === 'select' ? 'cursor-default' : 'cursor-crosshair')}`}
                     />
                 </div>
                 
-                {/* Result Comparison Overlay */}
                 {generatedResult && image && (
                     <div className="absolute inset-0 z-50 bg-[#0D0B14] animate-in fade-in duration-300">
-                        {/* Comparison Area - Full Height */}
                         <div className="relative w-full h-full overflow-hidden">
                              <ImageComparison 
                                 beforeImage={image.src} 
@@ -1161,7 +1163,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                                 labelAfter={t.compare_edited}
                              />
                              
-                             {/* Floating Toolbar Overlay */}
                              <div className="absolute bottom-6 inset-x-0 flex justify-center pointer-events-none z-40">
                                 <div className="pointer-events-auto flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300">
                                     <button
@@ -1171,11 +1172,33 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                                         <RotateCcw className="w-5 h-5 text-purple-400" />
                                         <span className="font-medium text-sm">{t.re_edit}</span>
                                     </button>
+
+                                    {/* Upload Button */}
+                                    {isStorageEnabled && provider !== 'modelscope' && (
+                                        <button
+                                            onClick={onCloudUpload}
+                                            disabled={isUploading}
+                                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/70 hover:text-white transition-all shadow-xl hover:shadow-green-900/10 hover:border-green-500/30 ${isUploading ? 'cursor-not-allowed opacity-70' : ''}`}
+                                        >
+                                            {isUploading ? (
+                                                <Loader2 className="w-5 h-5 animate-spin text-green-400" />
+                                            ) : (
+                                                <CloudUpload className="w-5 h-5 text-green-400" />
+                                            )}
+                                            <span className="font-medium text-sm">{isUploading ? t.uploading : t.upload}</span>
+                                        </button>
+                                    )}
+
                                     <button
                                         onClick={() => handleDownloadResult(generatedResult)}
-                                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/70 hover:text-white transition-all shadow-xl hover:shadow-blue-900/10 hover:border-blue-500/30"
+                                        disabled={isDownloading}
+                                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/70 hover:text-white transition-all shadow-xl hover:shadow-blue-900/10 hover:border-blue-500/30 ${isDownloading ? 'cursor-not-allowed opacity-70' : ''}`}
                                     >
-                                        <Download className="w-5 h-5 text-blue-400" />
+                                        {isDownloading ? (
+                                            <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+                                        ) : (
+                                            <Download className="w-5 h-5 text-blue-400" />
+                                        )}
                                         <span className="font-medium text-sm">{t.menu_download}</span>
                                     </button>
                                     <button
@@ -1191,7 +1214,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     </div>
                 )}
 
-                {/* Context Menu (Glassmorphism) */}
                 {contextMenu && (
                     <>
                         <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
@@ -1232,7 +1254,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     </>
                 )}
 
-                {/* Zoom Indicator (Bottom Left) */}
                 {image && (
                     <div className="absolute bottom-6 left-6 hidden md:flex items-center gap-1 bg-black/60 backdrop-blur-md border border-white/10 rounded-full text-white/70 shadow-lg z-20">
                         <Tooltip content={t.sc_zoom_out}>
@@ -1264,7 +1285,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     </div>
                 )}
 
-                {/* Shortcuts Help (Bottom Right) */}
                 <div className="absolute bottom-6 right-6 hidden md:block z-20">
                     <Tooltip content={t.shortcuts_title} position="left">
                         <button 
@@ -1276,9 +1296,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     </Tooltip>
                 </div>
 
-                {/* Floating Top Toolbar */}
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-0.5 p-1.5 bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30 max-w-[95vw]">
-                    {/* Move Tool */}
                     <Tooltip content={activeTool === 'move' ? t.tool_select : t.tool_move} position="bottom">
                         <button
                             onClick={() => setActiveTool(activeTool === 'move' ? 'select' : 'move')}
@@ -1294,7 +1312,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
 
                     <div className="w-px h-5 bg-white/10 mx-1" />
 
-                    {/* Drawing Tools */}
                     {drawingTools.map((tool) => {
                         const Icon = tool.icon;
                         return (
@@ -1315,7 +1332,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     
                     <div className="w-px h-5 bg-white/10 mx-1" />
                     
-                    {/* Undo */}
                     <Tooltip content={t.tool_undo} position="bottom">
                         <button 
                             onClick={handleUndo} 
@@ -1326,7 +1342,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                         </button>
                     </Tooltip>
 
-                    {/* Color Picker */}
                     <Tooltip content={t.tool_color} position="bottom">
                         <label className="cursor-pointer block relative">
                             <input 
@@ -1357,11 +1372,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     </Tooltip>
                 </div>
 
-                {/* Floating Bottom AI Command Bar */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-30 select-none">
                     <div className="relative flex items-center h-14 pl-2 pr-1.5 bg-black/60 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl shadow-black/40 ring-1 ring-white/5">
                         
-                        {/* Attach Reference Images */}
                         <div className="flex items-center mr-2">
                              {attachedImages.map((img, idx) => (
                                 <Tooltip key={idx} content={t.ref_image_n.replace('{n}', (idx + 1).toString())}>
@@ -1403,7 +1416,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                              )}
                         </div>
 
-                        {/* Sparkles Icon / Optimize Button */}
                         <Tooltip content={t.optimize}>
                             <button 
                                 onClick={handleOptimize}
@@ -1414,7 +1426,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                             </button>
                         </Tooltip>
 
-                        {/* Text Input */}
                         <input
                             type="text"
                             value={command}
@@ -1430,7 +1441,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                             className="flex-1 bg-transparent border-0 text-white placeholder:text-white/30 focus:ring-0 h-full text-sm font-medium px-0 min-w-0 disabled:opacity-50"
                         />
 
-                        {/* Generate Button with smooth transition to circular loading state */}
                         <button 
                             onClick={handleGenerate}
                             disabled={!image || !command.trim()}
@@ -1460,7 +1470,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 </div>
             </div>
 
-            {/* Exit Dialog Modal */}
             {showExitDialog && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-[#1A1625] border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-200">
@@ -1484,7 +1493,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 </div>
             )}
 
-            {/* History Selection Modal */}
+            {/* History Modal */}
             {showHistoryModal && (
                 <div 
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
@@ -1540,7 +1549,83 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 </div>
             )}
 
-            {/* Shortcuts Dialog Modal */}
+            {/* Gallery Modal */}
+            {showGalleryModal && (
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+                    onClick={() => setShowGalleryModal(false)}
+                >
+                    <div 
+                        className="bg-[#1A1625] border border-white/10 rounded-2xl p-0 max-w-3xl w-[90vw] h-[80vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between p-5 border-b border-white/10 bg-white/5">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <Cloud className="w-5 h-5 text-purple-400" />
+                                {t.gallery_modal_title}
+                            </h3>
+                            <button onClick={() => setShowGalleryModal(false)} className="text-white/40 hover:text-white transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-[#0D0B14]">
+                            {galleryLoading ? (
+                                <div className="flex flex-col items-center justify-center h-full text-white/30 space-y-4">
+                                    <Loader2 className="w-10 h-10 animate-spin" />
+                                </div>
+                            ) : galleryFiles.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-white/30 space-y-4">
+                                    <CloudUpload className="w-12 h-12 opacity-50" />
+                                    <p>{t.no_gallery_images}</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                        {visibleGalleryFiles.map((file) => {
+                                             const displayUrl = (getStorageTypeForGallery === 'webdav' && galleryLocalUrls[file.key]) 
+                                                ? galleryLocalUrls[file.key] 
+                                                : (getStorageTypeForGallery !== 'webdav' ? file.url : '');
+
+                                            return (
+                                                <button
+                                                    key={file.key}
+                                                    onClick={() => handleGallerySelect(file)}
+                                                    className="group relative aspect-square rounded-xl overflow-hidden border border-white/10 hover:border-purple-500 transition-all hover:ring-4 hover:ring-purple-500/20 focus:outline-none bg-white/5"
+                                                >
+                                                    {displayUrl ? (
+                                                        <img 
+                                                            src={displayUrl} 
+                                                            alt={file.key} 
+                                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                                            loading="lazy"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex items-center justify-center w-full h-full">
+                                                            <Loader2 className="w-6 h-6 text-white/20 animate-spin" />
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    {galleryLimit < galleryFiles.length && (
+                                        <div className="mt-6 flex justify-center">
+                                            <button
+                                                onClick={() => setGalleryLimit(prev => prev + 20)}
+                                                className="px-4 py-2 bg-white/10 hover:bg-white/15 text-white/80 rounded-lg text-sm font-medium transition-colors"
+                                            >
+                                                {t.load_more}
+                                            </button>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {showShortcuts && (
                 <div 
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"

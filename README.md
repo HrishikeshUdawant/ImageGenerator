@@ -1,4 +1,5 @@
 
+
 # Peinture (Free AI Image Gen)
 
 ![Stars](https://img.shields.io/github/stars/Amery2010/peinture?style=flat-square)
@@ -20,6 +21,7 @@ A sleek, dark-themed AI image generator built with React, TypeScript, and Tailwi
   - Model Scope: `Z-Image Turbo`, `FLUX.2`, `FLUX.1 Krea`, `FLUX.1`
 - **Image Editor**: Modify existing images with precision. Use Brush and Rectangle tools to guide AI edits, and upload up to 3 reference images for style or content guidance (Powered by Qwen-Image-Edit).
 - **Live Motion**: Transform static images into dynamic short videos using advanced Image-to-Video models (Wan2.2). Experience cinematic motion and bring your art to life (Supported on Hugging Face & Gitee AI).
+- **Cloud Storage & Gallery**: Configure **S3-compatible storage** (AWS, R2, MinIO) or **WebDAV** to save your creations privately in the cloud. Browse, manage, and download your cloud assets directly from the built-in Gallery.
 - **Prompt Optimization**: Integrated AI prompt enhancer that expands simple ideas into detailed, cinematic descriptions (powered by Pollinations.ai for Hugging Face, DeepSeek for Gitee AI and Model Scope).
 - **Auto Translation**: Intelligent detection and translation of non-English prompts to optimize performance for English-centric models like **FLUX**.
 - **Advanced Controls**: Fine-tune your creations with adjustable **inference steps**, **seed control**, **guidance scale** (for Flux), and **HD Mode** (High Definition).
@@ -27,7 +29,7 @@ A sleek, dark-themed AI image generator built with React, TypeScript, and Tailwi
 - **4x Resolution**: AI upscaling technology to increase image resolution up to 4x (Only supported on Hugging Face).
 - **Multilingual**: Full support for English and Chinese (中文) interfaces.
 - **Token Management**: Configure personal API tokens for higher rate limits and stability.
-- **Privacy Focused**: History is stored in your browser's LocalStorage; no backend database is required for user data.
+- **Privacy Focused**: History is stored in your browser's LocalStorage; Cloud credentials are also stored locally and never sent to our servers (except to authenticate with your storage provider).
 
 ## 🛠 Tech Stack
 
@@ -41,6 +43,7 @@ A sleek, dark-themed AI image generator built with React, TypeScript, and Tailwi
   - **Gitee AI API**
   - **Model Scope API**
   - **Pollinations.ai**
+  - **S3 / WebDAV Protocols**
 
 ## 🚀 Getting Started
 
@@ -144,6 +147,14 @@ To use the Model Scope provider, you must provide an API token.
 2. Paste it into the **Model Scope Token** field in Settings.
 
 *Tokens are stored securely in your browser's `localStorage` and are strictly used to authenticate requests to the respective Inference endpoints.*
+
+### Cloud Storage (Optional)
+To save your creations to the cloud:
+1. Go to **Settings > Storage**.
+2. Select **S3 Storage** or **WebDAV**.
+3. Enter your credentials (e.g., Access Key/Secret Key for S3, URL/User/Pass for WebDAV).
+4. Use the "Test Connection" button to verify.
+5. Once configured, a "Gallery" tab will appear, and you can upload images directly from the Creation or Editor views.
 
 ## ❓ FAQ
 
