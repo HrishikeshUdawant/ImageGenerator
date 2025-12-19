@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { generateImage, optimizePrompt, upscaler, createVideoTaskHF } from './services/hfService';
 import { generateGiteeImage, optimizePromptGitee, createVideoTask, getGiteeTaskStatus } from './services/giteeService';
@@ -477,11 +476,11 @@ export default function App() {
     try {
         let optimized = '';
         if (provider === 'gitee') {
-             optimized = await optimizePromptGitee(prompt, lang);
+             optimized = await optimizePromptGitee(prompt);
         } else if (provider === 'modelscope') {
-             optimized = await optimizePromptMS(prompt, lang);
+             optimized = await optimizePromptMS(prompt);
         } else {
-             optimized = await optimizePrompt(prompt, lang);
+             optimized = await optimizePrompt(prompt);
         }
         setPrompt(optimized);
     } catch (err: any) {

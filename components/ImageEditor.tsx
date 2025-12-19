@@ -22,7 +22,7 @@ import {
     Server,
     ChevronDown,
     RotateCcw,
-    Check,
+    LoaderCircle,
     Clock,
     History,
     Paintbrush
@@ -31,6 +31,7 @@ import { Tooltip } from './Tooltip';
 import { editImageQwen } from '../services/hfService';
 import { editImageGitee } from '../services/giteeService';
 import { editImageMS } from '../services/msService';
+import { optimizeEditPrompt } from '../services/utils';
 import { ProviderOption, GeneratedImage } from '../types';
 import { PROVIDER_OPTIONS } from '../constants';
 import { ImageComparison } from './ImageComparison';
@@ -50,6 +51,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     const containerRef = useRef<HTMLDivElement>(null);
     const snapshotRef = useRef<ImageData | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
     
     // Core State
     const [image, setImage] = useState<HTMLImageElement | null>(null);
@@ -65,6 +67,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     const [showProviderMenu, setShowProviderMenu] = useState(false);
     const [generatedResult, setGeneratedResult] = useState<string | null>(null);
     const [elapsedTime, setElapsedTime] = useState(0);
+    const [isOptimizing, setIsOptimizing] = useState(false);
 
     // Context Menu State
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
@@ -106,6 +109,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             if (interval) clearInterval(interval);
         };
     }, [isGenerating]);
+
+    // Clean up AbortController on unmount
+    useEffect(() => {
+        return () => {
+            abortControllerRef.current?.abort();
+        };
+    }, []);
 
     // Helper to proxy URLs to bypass CORS restrictions
     const getProxyUrl = (url: string) => {
@@ -695,35 +705,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         return new Blob([u8arr], {type:mime});
     };
 
-    // --- Dimension Constraints (Multiples of 8) ---
-    const scaleToConstraints = (w: number, h: number, maxVal: number = 1024) => {
-        let width = w;
-        let height = h;
-        const MAX = maxVal;
-        const MIN = 256;
-
-        // Scale down if too large
-        if (width > MAX || height > MAX) {
-            const ratio = Math.min(MAX / width, MAX / height);
-            width = Math.floor(width * ratio);
-            height = Math.floor(height * ratio);
-        }
-        // Ensure not too small
-        if (width < MIN || height < MIN) {
-            const ratio = Math.max(MIN / width, MIN / height);
-            width = Math.ceil(width * ratio);
-            height = Math.ceil(height * ratio);
-        }
-
-        // Snap to nearest multiple of 8 and clamp
-        const normalize = (v: number) => Math.min(MAX, Math.max(MIN, Math.floor(v / 8) * 8));
-        
-        return { 
-            width: normalize(width), 
-            height: normalize(height) 
-        };
-    };
-
     // --- Command Bar Attachment ---
     const handleRefImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -848,14 +829,60 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         }
     };
 
-    const handleGenerate = async () => {
+    const handleOptimize = async () => {
         if (!image || !command.trim()) return;
-        setIsGenerating(true);
+        setIsOptimizing(true);
         try {
-            // Dimension constraints (Multiples of 8)
-            const maxDimension = 1024;
-            const { width: normalizedWidth, height: normalizedHeight } = scaleToConstraints(image.naturalWidth, image.naturalHeight, maxDimension);
+            // Get merged image
+            const mergedCanvas = getMergedLayer();
+            if (!mergedCanvas) throw new Error("Could not get image data");
+
+            // Resize for API efficiency (max 1024px)
+            const maxDim = 1024;
+            let w = mergedCanvas.width;
+            let h = mergedCanvas.height;
+            if (w > maxDim || h > maxDim) {
+                const ratio = Math.min(maxDim / w, maxDim / h);
+                w = Math.round(w * ratio);
+                h = Math.round(h * ratio);
+            }
             
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = w;
+            tempCanvas.height = h;
+            const ctx = tempCanvas.getContext('2d');
+            if(ctx) {
+                ctx.drawImage(mergedCanvas, 0, 0, w, h);
+            }
+            
+            const base64 = tempCanvas.toDataURL('image/jpeg', 0.8); // JPEG 80% for speed/size
+
+            // Use the new unified service
+            const optimized = await optimizeEditPrompt(base64, command);
+            
+            if (optimized) setCommand(optimized);
+        } catch (e) {
+            console.error("Command optimization failed", e);
+            // Optional: show toast/alert
+        } finally {
+            setIsOptimizing(false);
+        }
+    };
+
+    const handleGenerate = async () => {
+        if (isGenerating) {
+            abortControllerRef.current?.abort();
+            setIsGenerating(false);
+            return;
+        }
+
+        if (!image || !command.trim()) return;
+        
+        setIsGenerating(true);
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        try {            
             const hasDrawings = historyIndex > 0;
             const imageBlobs: Blob[] = [];
             let promptSuffix = `\n${t.prompt_original_image}`;
@@ -888,17 +915,23 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             
             let result;
             if (provider === 'gitee') {
-                result = await editImageGitee(imageBlobs, finalPrompt);
+                result = await editImageGitee(imageBlobs, finalPrompt, undefined, undefined, 16, 4, controller.signal);
             } else if (provider === 'modelscope') {
-                result = await editImageMS(imageBlobs, finalPrompt);
+                result = await editImageMS(imageBlobs, finalPrompt, undefined, undefined, 16, 4, controller.signal);
             } else {
-                result = await editImageQwen(imageBlobs, finalPrompt, normalizedWidth, normalizedHeight);
+                result = await editImageQwen(imageBlobs, finalPrompt, image.naturalWidth, image.naturalHeight, 4, 1, controller.signal);
             }
 
             setGeneratedResult(result.url);
             setIsGenerating(false);
 
         } catch (e: any) {
+            if (e.name === 'AbortError') {
+                console.log('Generation cancelled by user');
+                setIsGenerating(false);
+                return;
+            }
+
             console.error(e);
             setIsGenerating(false);
             
@@ -909,6 +942,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             }
             
             alert((t as any)[e.message] || e.message || "Generation failed");
+        } finally {
+            abortControllerRef.current = null;
         }
     };
 
@@ -954,9 +989,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     backgroundSize: '20px 20px'
                 }}
             >
-                {/* Loading Overlay */}
+                {/* Loading Overlay - Scoped to Image Area (z-20 is below toolbars z-30) */}
                 {isGenerating && (
-                    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
                         <div className="relative">
                             <div className="h-24 w-24 rounded-full border-4 border-white/10 border-t-purple-500 animate-spin"></div>
                             <div className="absolute inset-0 flex items-center justify-center">
@@ -1335,10 +1370,16 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                              )}
                         </div>
 
-                        {/* Sparkles Icon */}
-                        <div className="hidden md:flex items-center justify-center w-6 h-full text-purple-500/80 mr-1">
-                            <Sparkles className="w-4 h-4" />
-                        </div>
+                        {/* Sparkles Icon / Optimize Button */}
+                        <Tooltip content={t.optimize}>
+                            <button 
+                                onClick={handleOptimize}
+                                disabled={isOptimizing || !command.trim()}
+                                className="flex items-center justify-center w-8 h-full text-purple-500/80 hover:text-purple-400 disabled:opacity-50 disabled:cursor-not-allowed mr-1 active:scale-90 transition-transform"
+                            >
+                                {isOptimizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                            </button>
+                        </Tooltip>
 
                         {/* Text Input */}
                         <input
@@ -1359,19 +1400,22 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                         {/* Generate Button with smooth transition to circular loading state */}
                         <button 
                             onClick={handleGenerate}
-                            disabled={isGenerating || !image || !command.trim()}
+                            disabled={!image || !command.trim()}
                             className={`
                                 flex items-center justify-center gap-1.5 transition-all duration-500 ease-in-out
-                                generate-button-gradient text-white font-bold shadow-lg shadow-purple-900/20 active:scale-95 ml-2
+                                font-bold shadow-lg active:scale-95 ml-2
                                 disabled:grayscale disabled:opacity-50
                                 ${isGenerating 
-                                    ? 'w-11 h-11 rounded-full p-0 flex-shrink-0' 
-                                    : 'px-4 py-2 rounded-full flex-shrink-0'
+                                    ? 'w-11 h-11 rounded-full p-0 flex-shrink-0 bg-white/60 hover:bg-white/80 text-white shadow-white/20 cursor-pointer' 
+                                    : 'px-4 py-2 rounded-full flex-shrink-0 generate-button-gradient text-white shadow-purple-900/20'
                                 }
                             `}
                         >
                             {isGenerating ? (
-                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <div className="relative">
+                                    <LoaderCircle className="w-8 h-8 animate-spin" />
+                                    <Square className="absolute top-1/2 left-1/2 -mt-1.5 -ml-1.5 w-3 h-3 fill-current" />
+                                </div>
                             ) : (
                                 <>
                                     <span className="whitespace-nowrap text-sm">{t.editor_generate}</span>
