@@ -725,7 +725,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             height = Math.ceil(height * ratio);
         }
         
-        return { width, height };
+        // Snap to nearest multiple of 8 and clamp
+        const normalize = (v: number) => Math.floor(v / 8) * 8;
+
+        return {
+            width: normalize(width),
+            height: normalize(height),
+        };
     };
 
     // --- Command Bar Attachment ---

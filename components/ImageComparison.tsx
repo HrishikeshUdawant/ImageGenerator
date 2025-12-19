@@ -57,7 +57,7 @@ export const ImageComparison: React.FC<ImageComparisonProps> = ({
   return (
     <div className="w-full h-full flex items-center justify-center">
       <div 
-        className="relative inline-block max-w-full max-h-full select-none overflow-hidden"
+        className="relative inline-flex max-w-full max-h-full select-none overflow-hidden"
         style={{ touchAction: 'none' }} // Prevents scrolling on mobile while sliding
         ref={containerRef}
         onMouseDown={onMouseDown}
@@ -70,20 +70,16 @@ export const ImageComparison: React.FC<ImageComparisonProps> = ({
         {/* 
            Layout Strategy:
            1. 'After' image (Upscaled) is the Base. It sets the dimensions of the container 
-              naturally because it is position: static (default).
+              naturally because it is relative/static. We constrain it with max-w/max-h.
            2. 'Before' image (Original) is Absolute Overlay. It sits on top.
            3. We clip the 'Before' image from the right side.
-           
-           Result:
-           - Left Side of Slider: Shows Overlay (Before/Original).
-           - Right Side of Slider: Shows Base (After/Upscaled).
         */}
 
         {/* Base Layer: Upscaled Image (Visible on the Right) */}
         <img 
             src={afterImage} 
             alt={`${alt} After`} 
-            className="block w-full h-full w-auto h-auto object-contain pointer-events-none" 
+            className="block max-w-full max-h-full w-auto h-auto object-contain pointer-events-none" 
             draggable={false}
         />
 
