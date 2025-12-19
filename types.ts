@@ -1,5 +1,4 @@
 
-
 export interface GeneratedImage {
     id: string;
     url: string;
@@ -51,6 +50,7 @@ export interface S3Config {
     region?: string; // Optional
     endpoint?: string; // Optional custom endpoint
     publicDomain?: string; // Optional CDN/Public domain
+    prefix?: string; // Optional prefix, default 'peinture/'
 }
 
 export interface WebDAVConfig {
@@ -67,7 +67,7 @@ export type ModelOption =
     | "qwen-image-fast" 
     | "ovis-image" 
     | "Qwen-Image"
-    | "flux-1-schnell"
+    | "flux-1-schnell" 
     | "FLUX_1-Krea-dev"
     | "FLUX.1-dev"
     | "FLUX.2-dev"

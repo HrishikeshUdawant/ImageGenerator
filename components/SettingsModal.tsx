@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { X, Save, KeyRound, Languages, ShieldCheck, ShieldAlert, Database, Eye, EyeOff, MessageSquare, RotateCcw, Settings2, MessageSquareText, Brain, Film, Clock, Layers, Sparkles, HardDrive, Server, Loader2, Check, AlertCircle, PlugZap } from 'lucide-react';
 import { Language } from '../translations';
@@ -300,7 +299,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
                         style={{ transform: `translateX(-${activeTabIndex * 100}%)` }}
                     >
                         {tabs.map((tab) => (
-                            <div key={tab.id} className="w-full h-full flex-shrink-0 overflow-y-auto custom-scrollbar p-5 h-[290px]">
+                            <div key={tab.id} className="w-full h-full flex-shrink-0 overflow-y-auto custom-scrollbar p-5 h-[300px]">
                                 {/* Tab 1: General */}
                                 {tab.id === 'general' && (
                                     <div className="space-y-5">
@@ -760,16 +759,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, l
                                                 />
                                             </div>
                                             
-                                            {/* Domain */}
-                                            <div className="flex-1 space-y-1">
-                                                <label className="text-xs font-medium text-white/60 block">{t.s3_domain}</label>
-                                                <input 
-                                                    type="text"
-                                                    value={s3Config.publicDomain || ''}
-                                                    onChange={(e) => setS3Config({ ...s3Config, publicDomain: e.target.value })}
-                                                    placeholder={t.s3_domain_placeholder}
-                                                    className="w-full px-3 py-2 bg-white/[0.03] border border-white/10 rounded-lg text-white text-sm focus:outline-0 focus:border-green-500/50 transition-all"
-                                                />
+                                             <div className="flex gap-4">
+                                                {/* Domain */}
+                                                <div className="flex-1 space-y-1">
+                                                    <label className="text-xs font-medium text-white/60 block">{t.s3_domain}</label>
+                                                    <input 
+                                                        type="text"
+                                                        value={s3Config.publicDomain || ''}
+                                                        onChange={(e) => setS3Config({ ...s3Config, publicDomain: e.target.value })}
+                                                        placeholder={t.s3_domain_placeholder}
+                                                        className="w-full px-3 py-2 bg-white/[0.03] border border-white/10 rounded-lg text-white text-sm focus:outline-0 focus:border-green-500/50 transition-all"
+                                                    />
+                                                </div>
+
+                                                {/* File Prefix */}
+                                                <div className="flex-1 space-y-1">
+                                                    <label className="text-xs font-medium text-white/60 block">{t.s3_prefix}</label>
+                                                    <input 
+                                                        type="text"
+                                                        value={s3Config.prefix ?? 'peinture/'}
+                                                        onChange={(e) => setS3Config({ ...s3Config, prefix: e.target.value })}
+                                                        placeholder={t.s3_prefix_placeholder}
+                                                        className="w-full px-3 py-2 bg-white/[0.03] border border-white/10 rounded-lg text-white text-sm focus:outline-0 focus:border-green-500/50 transition-all font-mono"
+                                                    />
+                                                </div>
                                             </div>
 
                                             {/* Test Connection Button */}

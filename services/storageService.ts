@@ -11,7 +11,8 @@ export const DEFAULT_S3_CONFIG: S3Config = {
     bucket: '',
     region: 'us-east-1',
     endpoint: '',
-    publicDomain: ''
+    publicDomain: '',
+    prefix: 'peinture/'
 };
 
 export const DEFAULT_WEBDAV_CONFIG: WebDAVConfig = {
@@ -86,6 +87,17 @@ export const isStorageConfigured = (): boolean => {
     if (type === 's3') return isS3Configured(getS3Config());
     if (type === 'webdav') return isWebDAVConfigured(getWebDAVConfig());
     return false;
+};
+
+// --- Helper ---
+
+const getS3Prefix = (config: S3Config) => {
+    let p = config.prefix || 'peinture/';
+    // Ensure trailing slash
+    if (!p.endsWith('/')) p += '/';
+    // Remove leading slash if present (S3 keys usually don't start with / unless intended)
+    if (p.startsWith('/')) p = p.substring(1);
+    return p;
 };
 
 // --- AWS Signature V4 Implementation (Existing) ---
@@ -419,8 +431,10 @@ const uploadToS3 = async (
     const region = config.region || 'us-east-1';
     const service = "s3";
     const bucket = config.bucket || '';
+    const prefix = getS3Prefix(config);
     
-    const key = fileName.startsWith('peinture/') ? fileName : `peinture/${fileName}`;
+    // Check if filename already has the prefix to avoid double nesting
+    const key = fileName.startsWith(prefix) ? fileName : `${prefix}${fileName}`;
 
     let endpoint = config.endpoint || `https://s3.${region}.amazonaws.com`;
     endpoint = endpoint.replace(/\/$/, "");
@@ -507,6 +521,7 @@ export const listS3Files = async (config: S3Config): Promise<CloudFile[]> => {
     const region = config.region || 'us-east-1';
     const service = "s3";
     const bucket = config.bucket || '';
+    const prefix = getS3Prefix(config);
 
     let endpoint = config.endpoint || `https://s3.${region}.amazonaws.com`;
     endpoint = endpoint.replace(/\/$/, "");
@@ -514,7 +529,6 @@ export const listS3Files = async (config: S3Config): Promise<CloudFile[]> => {
     const url = bucket ? `${endpoint}/${bucket}` : `${endpoint}`;
 
     const listType = '2';
-    const prefix = 'peinture/';
     
     const canonicalQueryString = `list-type=${listType}&prefix=${encodeURIComponent(prefix)}`;
     

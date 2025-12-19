@@ -1,6 +1,4 @@
 
-
-
 export type Language = 'en' | 'zh';
 
 export const translations = {
@@ -102,8 +100,10 @@ export const translations = {
     s3_region: "Region (Optional)",
     s3_endpoint: "Endpoint (Optional)",
     s3_domain: "Public Domain (Optional)",
+    s3_prefix: "File Prefix",
     s3_domain_placeholder: "e.g., https://cdn.example.com",
     s3_endpoint_placeholder: "e.g., https://s3.us-east-1.amazonaws.com",
+    s3_prefix_placeholder: "Default: peinture/",
 
     webdav_url: "WebDAV URL",
     webdav_username: "Username",
@@ -359,8 +359,10 @@ export const translations = {
     s3_region: "区域 (可选)",
     s3_endpoint: "端点 (可选)",
     s3_domain: "访问域名 (可选)",
+    s3_prefix: "文件前缀",
     s3_domain_placeholder: "例如: https://cdn.example.com",
     s3_endpoint_placeholder: "例如: https://s3.us-east-1.amazonaws.com",
+    s3_prefix_placeholder: "默认: peinture/",
 
     webdav_url: "WebDAV 地址",
     webdav_username: "用户名",
