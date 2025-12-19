@@ -705,6 +705,29 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         return new Blob([u8arr], {type:mime});
     };
 
+        // --- Dimension Constraints ---
+    const scaleToConstraints = (w: number, h: number, maxVal: number = 2048) => {
+        let width = w;
+        let height = h;
+        const MAX = maxVal;
+        const MIN = 256;
+
+        // Scale down if too large
+        if (width > MAX || height > MAX) {
+            const ratio = Math.min(MAX / width, MAX / height);
+            width = Math.floor(width * ratio);
+            height = Math.floor(height * ratio);
+        }
+        // Ensure not too small
+        if (width < MIN || height < MIN) {
+            const ratio = Math.max(MIN / width, MIN / height);
+            width = Math.ceil(width * ratio);
+            height = Math.ceil(height * ratio);
+        }
+        
+        return { width, height };
+    };
+
     // --- Command Bar Attachment ---
     const handleRefImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -882,7 +905,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         const controller = new AbortController();
         abortControllerRef.current = controller;
 
-        try {            
+        try {        
+            // Dimension constraints
+            const maxDimension = 2048;
+            const { width, height } = scaleToConstraints(image.naturalWidth, image.naturalHeight, maxDimension);
+
             const hasDrawings = historyIndex > 0;
             const imageBlobs: Blob[] = [];
             let promptSuffix = `\n${t.prompt_original_image}`;
@@ -915,11 +942,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             
             let result;
             if (provider === 'gitee') {
-                result = await editImageGitee(imageBlobs, finalPrompt, undefined, undefined, 16, 4, controller.signal);
+                result = await editImageGitee(imageBlobs, finalPrompt, width, height, 16, 4, controller.signal);
             } else if (provider === 'modelscope') {
-                result = await editImageMS(imageBlobs, finalPrompt, undefined, undefined, 16, 4, controller.signal);
+                result = await editImageMS(imageBlobs, finalPrompt, width, height, 16, 4, controller.signal);
             } else {
-                result = await editImageQwen(imageBlobs, finalPrompt, image.naturalWidth, image.naturalHeight, 4, 1, controller.signal);
+                result = await editImageQwen(imageBlobs, finalPrompt, width, height, 4, 1, controller.signal);
             }
 
             setGeneratedResult(result.url);
