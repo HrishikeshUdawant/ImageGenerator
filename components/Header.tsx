@@ -31,22 +31,6 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
-  const NavLink = ({ view, label, icon: Icon }: { view: AppView, label: string, icon: any }) => (
-      <button
-          onClick={() => {
-              setCurrentView(view);
-          }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              currentView === view 
-              ? 'bg-purple-600/20 text-purple-400 border border-purple-500/20' 
-              : 'text-white/60 hover:text-white hover:bg-white/5'
-          }`}
-      >
-          <Icon className="w-4 h-4" />
-          {label}
-      </button>
-  );
-
   return (
     <header className="w-full backdrop-blur-md sticky top-0 z-50 bg-background-dark/30 border-b border-white/5">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3 md:px-8 md:py-4 relative">
@@ -102,10 +86,34 @@ export const Header: React.FC<HeaderProps> = ({
             )}
         </div>
 
-        {/* Desktop: Navigation (Centered) */}
-        <div className="hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
-            <NavLink view="creation" label={t.nav_creation} icon={Sparkles} />
-            <NavLink view="editor" label={t.nav_editor} icon={PencilRuler} />
+        {/* Desktop: Sliding Pill Navigation (Centered) */}
+        <div className="hidden md:block absolute left-1/2 -translate-x-1/2">
+            <div className="relative flex items-center bg-black/20 border border-white/10 rounded-full p-1 w-[200px]">
+                {/* Background Sliding Pill */}
+                <div 
+                    className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-purple-600 rounded-full shadow-lg shadow-purple-900/30 transition-all duration-300 ease-out z-0
+                    ${currentView === 'creation' ? 'left-1' : 'left-[calc(50%+2px)]'}
+                    `}
+                />
+                
+                {/* Creation Button */}
+                <button 
+                    onClick={() => setCurrentView('creation')}
+                    className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-1.5 text-sm font-medium transition-colors duration-300 ${currentView === 'creation' ? 'text-white' : 'text-white/60 hover:text-white/90'}`}
+                >
+                    <Sparkles className="w-4 h-4" />
+                    {t.nav_creation}
+                </button>
+
+                {/* Editor Button */}
+                <button 
+                    onClick={() => setCurrentView('editor')}
+                    className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-1.5 text-sm font-medium transition-colors duration-300 ${currentView === 'editor' ? 'text-white' : 'text-white/60 hover:text-white/90'}`}
+                >
+                    <PencilRuler className="w-4 h-4" />
+                    {t.nav_editor}
+                </button>
+            </div>
         </div>
         
         {/* Actions */}

@@ -192,6 +192,11 @@ export const translations = {
     exit_dialog_title: "Exit Editor?",
     exit_dialog_desc: "This will clear your current canvas and history. Are you sure?",
     or_conjunction: " or ",
+
+    // Comparison Labels
+    compare_original: "Original",
+    compare_upscaled: "Upscaled 4x",
+    compare_edited: "Edited",
   },
   zh: {
     appTitle: "派奇智图",
@@ -383,5 +388,10 @@ export const translations = {
     exit_dialog_title: "确认退出编辑?",
     exit_dialog_desc: "退出将清空当前画布和历史记录。是否确认？",
     or_conjunction: " 或 ",
+
+    // Comparison Labels
+    compare_original: "原图",
+    compare_upscaled: "超清放大",
+    compare_edited: "编辑后",
   }
 };

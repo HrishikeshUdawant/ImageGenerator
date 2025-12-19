@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { generateImage, optimizePrompt, upscaler, createVideoTaskHF } from './services/hfService';
 import { generateGiteeImage, optimizePromptGitee, createVideoTask, getGiteeTaskStatus } from './services/giteeService';
 import { generateMSImage, optimizePromptMS } from './services/msService';
@@ -22,6 +22,9 @@ import { ControlPanel } from './components/ControlPanel';
 import { PreviewStage } from './components/PreviewStage';
 import { ImageToolbar } from './components/ImageToolbar';
 import { Tooltip } from './components/Tooltip';
+
+// Memoize Header to prevent re-renders when App re-renders (e.g. timer)
+const MemoizedHeader = memo(Header);
 
 export default function App() {
   // Language Initialization
@@ -747,15 +750,19 @@ export default function App() {
   // So we ONLY hide if isWorking (main image gen).
   const shouldHideToolbar = isWorking; 
 
+  // Stable callbacks for Header
+  const handleOpenSettings = useCallback(() => setShowSettings(true), []);
+  const handleOpenFAQ = useCallback(() => setShowFAQ(true), []);
+
   return (
     <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden bg-gradient-brilliant">
       <div className="flex h-full grow flex-col">
         {/* Header Component */}
-        <Header 
+        <MemoizedHeader 
             currentView={currentView}
             setCurrentView={setCurrentView}
-            onOpenSettings={() => setShowSettings(true)}
-            onOpenFAQ={() => setShowFAQ(true)}
+            onOpenSettings={handleOpenSettings}
+            onOpenFAQ={handleOpenFAQ}
             t={t}
         />
 
@@ -902,7 +909,7 @@ export default function App() {
                   t={t} 
                   provider={provider} 
                   setProvider={setProvider} 
-                  onOpenSettings={() => setShowSettings(true)}
+                  onOpenSettings={handleOpenSettings}
                   history={history}
                 />
             </main>

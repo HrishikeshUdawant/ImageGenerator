@@ -24,7 +24,8 @@ import {
     RotateCcw,
     Check,
     Clock,
-    History
+    History,
+    Paintbrush
 } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { editImageQwen } from '../services/hfService';
@@ -63,6 +64,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     const [isGenerating, setIsGenerating] = useState(false);
     const [showProviderMenu, setShowProviderMenu] = useState(false);
     const [generatedResult, setGeneratedResult] = useState<string | null>(null);
+    const [elapsedTime, setElapsedTime] = useState(0);
 
     // Context Menu State
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
@@ -78,6 +80,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     const [isDrawing, setIsDrawing] = useState(false);
     const [lastPosition, setLastPosition] = useState({ x: 0, y: 0 });
     const [startPosition, setStartPosition] = useState({ x: 0, y: 0 });
+    
+    // Touch Zoom State
+    const lastTouchDistance = useRef<number | null>(null);
 
     // AI Command State
     const [command, setCommand] = useState('');
@@ -86,6 +91,21 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     // Determine Platform for Shortcuts
     const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
     const MOD_KEY = isMac ? 'Cmd' : 'Alt'; 
+
+    // Timer Logic
+    useEffect(() => {
+        let interval: ReturnType<typeof setInterval>;
+        if (isGenerating) {
+            setElapsedTime(0);
+            const startTime = Date.now();
+            interval = setInterval(() => {
+                setElapsedTime((Date.now() - startTime) / 1000);
+            }, 100);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [isGenerating]);
 
     // Helper to proxy URLs to bypass CORS restrictions
     const getProxyUrl = (url: string) => {
@@ -558,6 +578,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
 
     const handleMouseUp = () => {
         setIsDragging(false);
+        lastTouchDistance.current = null;
         if (isDrawing) {
             setIsDrawing(false);
             const ctx = canvasRef.current?.getContext('2d');
@@ -570,6 +591,48 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 saveToHistory(ctx, canvasRef.current.width, canvasRef.current.height);
                 snapshotRef.current = null;
             }
+        }
+    };
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (e.touches.length === 2) {
+            // Pinch to zoom Logic
+            e.preventDefault();
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            lastTouchDistance.current = dist;
+        } else {
+            handleMouseDown(e);
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (e.touches.length === 2 && lastTouchDistance.current && containerRef.current) {
+            // Pinch to zoom Logic
+            e.preventDefault();
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            const delta = dist / lastTouchDistance.current;
+            const newScale = Math.min(Math.max(0.1, scale * delta), 10);
+            
+            // Zoom center logic based on touch midpoint
+            const rect = containerRef.current.getBoundingClientRect();
+            const touchCx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+            const touchCy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+
+            // Adjust offset to zoom into the midpoint
+            const newOffsetX = touchCx - (touchCx - offset.x) * (newScale / scale);
+            const newOffsetY = touchCy - (touchCy - offset.y) * (newScale / scale);
+
+            setScale(newScale);
+            setOffset({ x: newOffsetX, y: newOffsetY });
+            lastTouchDistance.current = dist;
+        } else {
+            handleMouseMove(e);
         }
     };
 
@@ -891,6 +954,22 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     backgroundSize: '20px 20px'
                 }}
             >
+                {/* Loading Overlay */}
+                {isGenerating && (
+                    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="relative">
+                            <div className="h-24 w-24 rounded-full border-4 border-white/10 border-t-purple-500 animate-spin"></div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <Paintbrush className="text-purple-400 animate-pulse w-8 h-8" />
+                            </div>
+                        </div>
+                        <p className="mt-8 text-white/80 font-medium animate-pulse text-lg">
+                            {t.dreaming}
+                        </p>
+                        <p className="mt-2 font-mono text-purple-300 text-lg">{elapsedTime.toFixed(1)}s</p>
+                    </div>
+                )}
+
                 {/* Upload CTA - Only visible when no image */}
                 {!image && (
                     <div  className="absolute z-40 inset-0 flex flex-col items-center justify-center p-6 md:p-12">
@@ -978,8 +1057,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseUp}
-                    onTouchStart={handleMouseDown}
-                    onTouchMove={handleMouseMove}
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
                     onTouchEnd={handleMouseUp}
                     onWheel={handleWheel}
                 >
@@ -1010,6 +1089,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                                 beforeImage={image.src} 
                                 afterImage={generatedResult} 
                                 alt="Comparison" 
+                                labelBefore={t.compare_original}
+                                labelAfter={t.compare_edited}
                              />
                              
                              {/* Floating Toolbar Overlay */}
@@ -1017,17 +1098,24 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                                 <div className="pointer-events-auto flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300">
                                     <button
                                         onClick={() => setGeneratedResult(null)}
-                                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/80 hover:text-white transition-all shadow-xl hover:shadow-red-900/10 hover:border-red-500/30"
+                                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/70 hover:text-white transition-all shadow-xl hover:shadow-purple-900/10 hover:border-purple-500/30"
                                     >
-                                        <RotateCcw className="w-5 h-5 text-red-400" />
+                                        <RotateCcw className="w-5 h-5 text-purple-400" />
                                         <span className="font-medium text-sm">{t.re_edit}</span>
                                     </button>
                                     <button
                                         onClick={() => handleDownloadResult(generatedResult)}
-                                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/80 hover:text-white transition-all shadow-xl hover:shadow-purple-900/10 hover:border-purple-500/30"
+                                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/70 hover:text-white transition-all shadow-xl hover:shadow-blue-900/10 hover:border-blue-500/30"
                                     >
-                                        <Download className="w-5 h-5 text-purple-400" />
+                                        <Download className="w-5 h-5 text-blue-400" />
                                         <span className="font-medium text-sm">{t.menu_download}</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setShowExitDialog(true)}
+                                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/70 hover:text-white transition-all shadow-xl hover:shadow-red-900/10 hover:border-red-500/30"
+                                    >
+                                        <LogOut className="w-5 h-5 text-red-400" />
+                                        <span className="font-medium text-sm">{t.menu_exit}</span>
                                     </button>
                                 </div>
                              </div>
