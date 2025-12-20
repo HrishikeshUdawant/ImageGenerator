@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import { generateImage, optimizePrompt, upscaler, createVideoTaskHF } from './services/hfService';
 import { generateGiteeImage, optimizePromptGitee, createVideoTask, getGiteeTaskStatus } from './services/giteeService';
 import { generateMSImage, optimizePromptMS } from './services/msService';
@@ -846,6 +846,12 @@ export default function App() {
   // So we ONLY hide if isWorking (main image gen).
   const shouldHideToolbar = isWorking; 
 
+  // Check if current image is already uploaded
+  const isCurrentUploaded = useMemo(() => {
+      if (!currentImage) return false;
+      return cloudHistory.some(ci => ci.fileName && ci.fileName.includes(currentImage.id));
+  }, [currentImage, cloudHistory]);
+
   // Stable callbacks for Header
   const handleOpenSettings = useCallback(() => setShowSettings(true), []);
   const handleOpenFAQ = useCallback(() => setShowFAQ(true), []);
@@ -997,6 +1003,7 @@ export default function App() {
                                     }
                                 }}
                                 isUploading={isUploading}
+                                isUploaded={isCurrentUploaded}
                             />
                         )}
                     </div>
