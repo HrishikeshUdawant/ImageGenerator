@@ -345,7 +345,7 @@ const generateQwenImage = async (
       return {
         id: generateUUID(),
         url: data[0].url,
-        model: 'qwen-image-fast',
+        model: 'qwen-image', // Standardized ID
         prompt,
         aspectRatio,
         timestamp: Date.now(),
@@ -461,7 +461,7 @@ export const editImageQwen = async (
       return {
         id: generateUUID(),
         url: data[0][0].image.url,
-        model: 'qwen-image-edit-fast',
+        model: 'qwen-image-edit', // Unified ID
         prompt,
         aspectRatio: 'custom',
         timestamp: Date.now(),
@@ -489,11 +489,12 @@ export const generateImage = async (
 
   if (model === 'flux-1-schnell') {
     return generateFluxSchnellImage(prompt, aspectRatio, finalSeed, enableHD, steps);
-  } else if (model === 'qwen-image-fast') {
+  } else if (model === 'qwen-image') {
     return generateQwenImage(prompt, aspectRatio, seed, steps);
   } else if (model === 'ovis-image') {
     return generateOvisImage(prompt, aspectRatio, finalSeed, enableHD, steps)
   } else {
+    // Default to z-image-turbo
     return generateZImage(prompt, aspectRatio, finalSeed, enableHD, steps);
   }
 };

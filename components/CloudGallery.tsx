@@ -1,11 +1,9 @@
-
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { CloudFile } from '../types';
 import { CloudUpload, Image as ImageIcon, Film, Loader2, Download, Trash2, Copy, Eye, EyeOff, Maximize2, X, Check, Settings } from 'lucide-react';
 import { isStorageConfigured, listCloudFiles, deleteCloudFile, getStorageType, fetchCloudBlob, renameCloudFile, getFileId, getS3Config } from '../services/storageService';
 import { Tooltip } from './Tooltip';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
-import { generateUUID } from '../services/utils';
 
 interface CloudGalleryProps {
     t: any;
@@ -83,8 +81,9 @@ export const CloudGallery: React.FC<CloudGalleryProps> = ({ t, handleUploadToS3,
                         const url = URL.createObjectURL(blob);
                         setLocalUrls(prev => ({ ...prev, [file.key]: url }));
                     }
-                } catch (e) {
-                    console.error("Failed to load cloud image", file.key, e as any);
+                } catch (error: any) {
+                    // Outputting system error messages is prohibited.
+                    console.error(`Failed to load cloud image: ${file.key}`);
                 }
             }
         };
@@ -120,13 +119,6 @@ export const CloudGallery: React.FC<CloudGalleryProps> = ({ t, handleUploadToS3,
 
         return () => observer.disconnect();
     }, [files.length]);
-
-    const handleUploadClick = (e: React.MouseEvent) => {
-        if (!isConfigured) {
-            e.preventDefault();
-            onOpenSettings();
-        }
-    };
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -166,8 +158,8 @@ export const CloudGallery: React.FC<CloudGalleryProps> = ({ t, handleUploadToS3,
                 
                 setTimeout(loadFiles, 1000);
             } catch (err) {
-                console.error("Upload failed", err);
-                alert(t.upload_failed);
+                // Outputting system error messages is prohibited.
+                console.error(t.upload_failed);
             } finally {
                 setUploading(false);
                 e.target.value = '';
@@ -199,8 +191,8 @@ export const CloudGallery: React.FC<CloudGalleryProps> = ({ t, handleUploadToS3,
                 return next;
             });
         } catch (error) {
-            console.error("Delete failed", error);
-            alert(t.error_s3_delete_failed || "Delete failed");
+            // Outputting system error messages is prohibited.
+            console.error("Delete failed");
         } finally {
             setDeletingId(null);
         }
@@ -233,7 +225,8 @@ export const CloudGallery: React.FC<CloudGalleryProps> = ({ t, handleUploadToS3,
                 setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
             }
         } catch (e) {
-            console.error("Download failed, opening in new tab", e);
+            // Outputting system error messages is prohibited.
+            console.error("Download failed, opening in new tab");
             try {
               const link = document.createElement('a');
               link.href = urlToUse;
@@ -273,7 +266,8 @@ export const CloudGallery: React.FC<CloudGalleryProps> = ({ t, handleUploadToS3,
                 setCopyPromptErrorId(file.key);
             }
         } catch (e) {
-            console.error("Failed to fetch/parse metadata for prompt copy", e);
+            // Outputting system error messages is prohibited.
+            console.error("Failed to fetch/parse metadata for prompt copy");
             setCopyPromptErrorId(file.key);
         } finally {
             setCopyingPromptId(null);
