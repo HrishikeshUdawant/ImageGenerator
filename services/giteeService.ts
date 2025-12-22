@@ -353,7 +353,7 @@ export const optimizePromptGitee = async (originalPrompt: string): Promise<strin
 const VIDEO_NEGATIVE_PROMPT = "Vivid colors, overexposed, static, blurry details, subtitles, style, artwork, painting, image, still, overall grayish tone, worst quality, low quality, JPEG compression artifacts, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, still image, cluttered background, three legs, many people in the background, walking backward, Screen shaking";
 
 export const createVideoTask = async (
-  imageUrl: string, 
+  imageInput: string | Blob, 
   width: number, 
   height: number
 ): Promise<string> => {
@@ -365,7 +365,7 @@ export const createVideoTask = async (
       const apiModel = API_MODEL_MAP.gitee['wan2_2-i2v'];
 
       const formData = new FormData();
-      formData.append('image', imageUrl); 
+      formData.append('image', imageInput); 
       formData.append('prompt', settings.prompt);
       formData.append('negative_prompt', VIDEO_NEGATIVE_PROMPT);
       formData.append('model', apiModel);

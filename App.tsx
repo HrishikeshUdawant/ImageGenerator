@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
-import { generateImage, upscaler, createVideoTaskHF } from './services/hfService';
+import { generateImage, upscaler, createVideoTaskHF, uploadToGradio, QWEN_IMAGE_EDIT_BASE_API_URL } from './services/hfService';
 import { generateGiteeImage, optimizePromptGitee, createVideoTask, getGiteeTaskStatus } from './services/giteeService';
 import { generateMSImage, optimizePromptMS } from './services/msService';
 import { generateCustomImage, generateCustomVideo, optimizePromptCustom, fetchServerModels } from './services/customService';
@@ -50,7 +50,7 @@ export default function App() {
     { value: '9:16', label: t.ar_photo_9_16 },
     { value: '16:9', label: t.ar_movie },
     { value: '3:4', label: t.ar_portrait_3_4 },
-    { value: '4:3', label: t.ar_portrait_3_4 },
+    { value: '4:3', label: t.ar_landscape_4_3 },
     { value: '3:2', label: t.ar_portrait_3_2 },
     { value: '2:3', label: t.ar_landscape_2_3 },
   ];
@@ -473,6 +473,31 @@ export default function App() {
     sessionStorage.setItem('prompt_history', JSON.stringify(newHistory));
   };
 
+  // Helper to convert URL to Blob (handles Proxy logic if needed)
+  const getUrlAsBlob = async (url: string, useProxy = false): Promise<Blob> => {
+      return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = "Anonymous";
+          img.src = useProxy ? `https://i0.wp.com/${url.replace(/^https?:\/\//, '')}` : url;
+          img.onload = () => {
+               const canvas = document.createElement('canvas');
+               canvas.width = img.naturalWidth;
+               canvas.height = img.naturalHeight;
+               const ctx = canvas.getContext('2d');
+               if (ctx) {
+                   ctx.drawImage(img, 0, 0);
+                   canvas.toBlob(blob => {
+                       if(blob) resolve(blob);
+                       else reject(new Error("Canvas blob conversion failed"));
+                   }, 'image/png');
+               } else {
+                   reject(new Error("Canvas context failed"));
+               }
+          };
+          img.onerror = (e) => reject(new Error("Image load failed for blob conversion"));
+      });
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
@@ -715,16 +740,33 @@ export default function App() {
   const handleLiveClick = async () => {
       if (!currentImage) return;
 
-      // 2. If already generating, do nothing
+      // If already generating, do nothing
       if (currentImage.videoStatus === 'generating') return;
 
-      // 3. Start Generation
+      // Start Generation
       let width = imageDimensions?.width || 1024;
       let height = imageDimensions?.height || 1024;
 
       // Get configured Live Model
       const liveConfig = getLiveModelConfig(); // { provider, model }
       const currentVideoProvider = liveConfig.provider as ProviderOption;
+
+      // Prepare Image Input
+      // If we are cross-provider or need robust handling (like ModelScope), get a Blob.
+      let imageInput: string | Blob = currentImage.url;
+      
+      try {
+          // If the image is from ModelScope or a Custom provider that might have CORS issues,
+          // or simply to ensure stability across providers for Live generation:
+          // Try to fetch it as a Blob. For ModelScope specifically, use proxy logic in getUrlAsBlob.
+          if (currentImage.provider === 'modelscope' || currentImage.provider !== currentVideoProvider) {
+               // Use proxy for fetching to be safe
+               imageInput = await getUrlAsBlob(currentImage.url, true);
+          }
+      } catch (e) {
+          console.warn("Failed to convert image to blob for Live gen, falling back to URL", e);
+          // Fallback to URL if blob conversion fails (might still work if URL is accessible by provider)
+      }
 
       // Resolution scaling logic (Specific to Gitee)
       if (currentVideoProvider === 'gitee') {
@@ -758,14 +800,15 @@ export default function App() {
           if (currentVideoProvider === 'gitee') {
               // Gitee: Create Task and let polling handle it
               // Prompt is fetched from settings inside the service
-              const taskId = await createVideoTask(currentImage.url, width, height);
+              const taskId = await createVideoTask(imageInput, width, height);
               const taskedImage = { ...loadingImage, videoTaskId: taskId } as GeneratedImage;
               setCurrentImage(taskedImage);
               setHistory(prev => prev.map(img => img.id === taskedImage.id ? taskedImage : img));
           } else if (currentVideoProvider === 'huggingface') {
               // HF: Create Task handles the waiting internally (Long Connection)
               // Prompt is fetched from settings inside the service
-              const videoUrl = await createVideoTaskHF(currentImage.url, currentImage.seed);
+              // Updated createVideoTaskHF supports Blob input
+              const videoUrl = await createVideoTaskHF(imageInput, currentImage.seed);
               // Success
               const successImage = { ...loadingImage, videoStatus: 'success', videoUrl } as GeneratedImage;
               setHistory(prev => prev.map(img => img.id === successImage.id ? successImage : img));
@@ -777,6 +820,14 @@ export default function App() {
               }
           } else {
               // Custom Video Provider
+              // For custom, we convert Blob to string URL if needed or handle upload?
+              // The generateCustomVideo service expects a string URL currently.
+              // If we have a blob, we might need to upload it somewhere first.
+              // For now, if we have a blob, create a temporary object URL? No, that's local.
+              // Custom providers typically need a publicly accessible URL or base64.
+              // Assuming custom provider can handle the original URL if not blob.
+              // If we have blob, let's revert to original URL and hope custom provider can fetch it.
+              
               const customProviders = getCustomProviders();
               const activeProvider = customProviders.find(p => p.id === currentVideoProvider);
               if (activeProvider) {
@@ -784,7 +835,7 @@ export default function App() {
                   const videoUrl = await generateCustomVideo(
                       activeProvider, 
                       liveConfig.model, 
-                      currentImage.url, 
+                      currentImage.url, // Pass original URL for custom
                       settings.prompt, 
                       settings.duration, 
                       currentImage.seed ?? 42, 
@@ -946,28 +997,49 @@ export default function App() {
         }
 
         let blob: Blob;
-        if (typeof imageBlobOrUrl === 'string') {
-            // Fetch blob from URL
-            let fetchUrl = imageBlobOrUrl;
-            
-            // Check if Gitee provider to apply proxy
-            const context = metadata || (currentImage ? { ...currentImage } : {});
-            if (context.provider === 'gitee') {
-                 const cleanUrl = imageBlobOrUrl.replace(/^https?:\/\//, '');
-                 fetchUrl = `https://i0.wp.com/${cleanUrl}`;
-            }
+        let finalFileName = fileName || `generated-${generateUUID()}`;
+        
+        // Extract metadata and context
+        const context = metadata || (currentImage ? { ...currentImage } : {});
+        const isModelScope = context.provider === 'modelscope';
 
-            const response = await fetch(fetchUrl);
-            if (!response.ok) throw new Error("Failed to fetch image for upload");
-            blob = await response.blob();
+        if (typeof imageBlobOrUrl === 'string') {
+            if (isModelScope) {
+                // Special handling for ModelScope to bypass CORS issues via Gradio Relay
+                try {
+                    // 1. Upload to public Gradio server to get a "clean" URL
+                    const gradioPath = await uploadToGradio(QWEN_IMAGE_EDIT_BASE_API_URL, imageBlobOrUrl, null);
+                    const cleanUrl = `${QWEN_IMAGE_EDIT_BASE_API_URL}/gradio_api/file=${gradioPath}`;
+                    
+                    // 2. Fetch from the clean URL
+                    const res = await fetch(cleanUrl);
+                    if (!res.ok) throw new Error("Failed to fetch cleaned image");
+                    blob = await res.blob();
+                    
+                } catch (e) {
+                    console.error("ModelScope upload workaround failed", e);
+                    // Fallback to trying direct fetch proxy
+                    const fetchUrl = `https://i0.wp.com/${imageBlobOrUrl.replace(/^https?:\/\//, '')}`;
+                    const response = await fetch(fetchUrl);
+                    if (!response.ok) throw new Error("Failed to fetch image for upload");
+                    blob = await response.blob();
+                }
+            } else if (context.provider === 'gitee') {
+                 const cleanUrl = imageBlobOrUrl.replace(/^https?:\/\//, '');
+                 const fetchUrl = `https://i0.wp.com/${cleanUrl}`;
+                 const response = await fetch(fetchUrl);
+                 if (!response.ok) throw new Error("Failed to fetch image for upload");
+                 blob = await response.blob();
+            } else {
+                // Standard fetch
+                const response = await fetch(imageBlobOrUrl);
+                if (!response.ok) throw new Error("Failed to fetch image for upload");
+                blob = await response.blob();
+            }
         } else {
             blob = imageBlobOrUrl;
         }
 
-        // Use passed filename or generate a default one with prefix
-        // For generated images, we now pass ID as filename, but ensure we have a fallback
-        const finalFileName = fileName || `generated-${generateUUID()}`;
-        
         // Use provided metadata or extract from currentImage if uploading from creation view
         const finalMetadata = metadata || (currentImage ? { ...currentImage } : null);
         

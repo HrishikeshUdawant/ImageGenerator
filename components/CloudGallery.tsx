@@ -466,7 +466,7 @@ export const CloudGallery: React.FC<CloudGalleryProps> = ({ t, handleUploadToS3,
                                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300 pointer-events-none" />
 
                                          {/* Bottom Toolbar Overlay */}
-                                         <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none">
+                                         <div className="absolute bottom-0 left-0 right-0 p-1.5 flex items-end justify-between opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none">
                                              
                                              {/* Left: Time & Size - HIDDEN on mobile */}
                                              <div className="hidden md:flex flex-col gap-0.5 text-white/90 drop-shadow-md">
@@ -475,13 +475,13 @@ export const CloudGallery: React.FC<CloudGalleryProps> = ({ t, handleUploadToS3,
                                              </div>
 
                                              {/* Right: Actions - Pointer events enabled */}
-                                             <div className="flex items-center gap-2 ml-auto pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+                                             <div className="flex items-center ml-auto pointer-events-auto" onClick={(e) => e.stopPropagation()}>
                                                  
                                                  {/* NSFW Toggle */}
                                                  <Tooltip content={isNSFW ? t.unmark_nsfw : t.mark_nsfw} position="top">
                                                      <button 
                                                          onClick={(e) => { e.stopPropagation(); handleToggleNSFW(file); }}
-                                                         className={`p-2 hover:text-white ${isNSFW ? 'text-purple-400' : 'text-white/80'}`}
+                                                         className={`p-2 hover:text-white hover:bg-white/10 rounded-full transition-all ${isNSFW ? 'text-purple-400' : 'text-white/80'}`}
                                                      >
                                                          {togglingNsfwId === file.key ? <Loader2 className="w-4 h-4 animate-spin" /> : (isNSFW ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />)}
                                                      </button>
@@ -491,7 +491,7 @@ export const CloudGallery: React.FC<CloudGalleryProps> = ({ t, handleUploadToS3,
                                                  <Tooltip content={copiedPromptId === file.key ? t.copied : t.copy_prompt} position="top">
                                                      <button 
                                                          onClick={(e) => { e.stopPropagation(); handleCopyPrompt(file); }}
-                                                         className={`p-2 hover:text-white ${copyPromptErrorId === file.key ? 'text-white/30 cursor-not-allowed' : 'text-white/80'}`}
+                                                         className={`p-2 hover:text-white hover:bg-white/10 rounded-full transition-all ${copyPromptErrorId === file.key ? 'text-white/30 cursor-not-allowed' : 'text-white/80'}`}
                                                          disabled={copyingPromptId === file.key || copyPromptErrorId === file.key}
                                                      >
                                                          {copyingPromptId === file.key ? (
@@ -508,7 +508,7 @@ export const CloudGallery: React.FC<CloudGalleryProps> = ({ t, handleUploadToS3,
                                                  <Tooltip content={t.download} position="top">
                                                      <button 
                                                          onClick={(e) => { e.stopPropagation(); handleDownload(file); }}
-                                                         className="p-2 text-white/80 hover:text-white"
+                                                         className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-all"
                                                      >
                                                          <Download className="w-4 h-4" />
                                                  </button>
@@ -518,7 +518,7 @@ export const CloudGallery: React.FC<CloudGalleryProps> = ({ t, handleUploadToS3,
                                              <Tooltip content={t.delete} position="top">
                                                  <button 
                                                      onClick={(e) => { e.stopPropagation(); handleDeleteClick(file); }}
-                                                     className="p-2 text-white/80 hover:text-red-400"
+                                                     className="p-2 text-white/80 hover:text-red-400 hover:bg-white/10 rounded-full transition-all"
                                                  >
                                                      {deletingId === file.key ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                                                  </button>
