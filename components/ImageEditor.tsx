@@ -228,13 +228,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         // Check if it's a data URL or blob URL (local), return as is
         if (url.startsWith('data:') || url.startsWith('blob:')) return url;
         
-        // Remove protocol
-        const cleanUrl = url.replace(/^https?:\/\//, '');
-        return `https://i0.wp.com/${cleanUrl}`;
+        return `https://serveproxy.com/?url=${url}`;
     };
-
-    // Filter history to exclude Model Scope images as they typically have CORS issues even with proxy
-    const compatibleHistory = history.filter(img => img.provider !== 'modelscope');
 
     // --- History Management ---
     
@@ -355,10 +350,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         };
         img.onerror = () => {
             console.error("Failed to load image via proxy:", url);
-            // If proxy fails and it's not a blob, try direct
-            if (url.includes('i0.wp.com')) {
-                // Should handle better, but for now log
-            }
         };
         img.src = getProxyUrl(url);
     };
@@ -1516,14 +1507,14 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                         </div>
                         
                         <div className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-[#0D0B14]">
-                            {compatibleHistory.length === 0 ? (
+                            {history.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center h-full text-white/30 space-y-4">
                                     <Sparkles className="w-12 h-12 opacity-50" />
                                     <p>{t.no_history_images}</p>
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                                    {compatibleHistory.map((img) => (
+                                    {history.map((img) => (
                                         <button
                                             key={img.id}
                                             onClick={() => handleHistorySelect(img)}

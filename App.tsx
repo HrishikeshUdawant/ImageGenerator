@@ -478,7 +478,7 @@ export default function App() {
       return new Promise((resolve, reject) => {
           const img = new Image();
           img.crossOrigin = "Anonymous";
-          img.src = useProxy ? `https://i0.wp.com/${url.replace(/^https?:\/\//, '')}` : url;
+          img.src = useProxy ? `https://serveproxy.com/?url=${url}` : url;
           img.onload = () => {
                const canvas = document.createElement('canvas');
                canvas.width = img.naturalWidth;
@@ -756,10 +756,10 @@ export default function App() {
       let imageInput: string | Blob = currentImage.url;
       
       try {
-          // If the image is from ModelScope or a Custom provider that might have CORS issues,
+          // If the image is from ModelScope or Gitee AI provider that have CORS issues,
           // or simply to ensure stability across providers for Live generation:
           // Try to fetch it as a Blob. For ModelScope specifically, use proxy logic in getUrlAsBlob.
-          if (currentImage.provider === 'modelscope' || currentImage.provider !== currentVideoProvider) {
+          if (currentImage.provider === 'gitee' || currentImage.provider === 'modelscope') {
                // Use proxy for fetching to be safe
                imageInput = await getUrlAsBlob(currentImage.url, true);
           }
@@ -873,6 +873,8 @@ export default function App() {
 
     if (isDownloading) return;
     setIsDownloading(true);
+
+    imageUrl = currentImage.provider === 'gitee' || currentImage.provider === 'modelscope' ? `https://serveproxy.com/?url=${imageUrl}` : imageUrl
 
     try {
       // 1. Fetch blob (handles CORS if server allows, and Data URLs)
@@ -1004,32 +1006,11 @@ export default function App() {
         const isModelScope = context.provider === 'modelscope';
 
         if (typeof imageBlobOrUrl === 'string') {
-            if (isModelScope) {
-                // Special handling for ModelScope to bypass CORS issues via Gradio Relay
-                try {
-                    // 1. Upload to public Gradio server to get a "clean" URL
-                    const gradioPath = await uploadToGradio(QWEN_IMAGE_EDIT_BASE_API_URL, imageBlobOrUrl, null);
-                    const cleanUrl = `${QWEN_IMAGE_EDIT_BASE_API_URL}/gradio_api/file=${gradioPath}`;
-                    
-                    // 2. Fetch from the clean URL
-                    const res = await fetch(cleanUrl);
-                    if (!res.ok) throw new Error("Failed to fetch cleaned image");
-                    blob = await res.blob();
-                    
-                } catch (e) {
-                    console.error("ModelScope upload workaround failed", e);
-                    // Fallback to trying direct fetch proxy
-                    const fetchUrl = `https://i0.wp.com/${imageBlobOrUrl.replace(/^https?:\/\//, '')}`;
-                    const response = await fetch(fetchUrl);
-                    if (!response.ok) throw new Error("Failed to fetch image for upload");
-                    blob = await response.blob();
-                }
-            } else if (context.provider === 'gitee') {
-                 const cleanUrl = imageBlobOrUrl.replace(/^https?:\/\//, '');
-                 const fetchUrl = `https://i0.wp.com/${cleanUrl}`;
-                 const response = await fetch(fetchUrl);
-                 if (!response.ok) throw new Error("Failed to fetch image for upload");
-                 blob = await response.blob();
+            if (context.provider === 'modelscope' || context.provider === 'gitee') {
+                const fetchUrl = `https://serveproxy.com/?url=${imageBlobOrUrl}`;
+                const response = await fetch(fetchUrl);
+                if (!response.ok) throw new Error("Failed to fetch image for upload");
+                blob = await response.blob();
             } else {
                 // Standard fetch
                 const response = await fetch(imageBlobOrUrl);
