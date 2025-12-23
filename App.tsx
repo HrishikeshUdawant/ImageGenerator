@@ -3,8 +3,8 @@ import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from '
 import { generateImage, upscaler, createVideoTaskHF, uploadToGradio, QWEN_IMAGE_EDIT_BASE_API_URL } from './services/hfService';
 import { generateGiteeImage, optimizePromptGitee, createVideoTask, getGiteeTaskStatus } from './services/giteeService';
 import { generateMSImage, optimizePromptMS } from './services/msService';
-import { generateCustomImage, generateCustomVideo, optimizePromptCustom, fetchServerModels } from './services/customService';
-import { translatePrompt, generateUUID, getLiveModelConfig, getTextModelConfig, optimizeEditPrompt, getCustomProviders, getVideoSettings, getServiceMode, saveServiceMode, addCustomProvider } from './services/utils';
+import { generateCustomImage, generateCustomVideo, optimizePromptCustom, fetchServerModels, getCustomTaskStatus, upscaleImageCustom } from './services/customService';
+import { translatePrompt, generateUUID, getLiveModelConfig, getTextModelConfig, getUpscalerModelConfig, optimizeEditPrompt, getCustomProviders, getVideoSettings, getServiceMode, saveServiceMode, addCustomProvider } from './services/utils';
 import { uploadToCloud, isStorageConfigured } from './services/storageService';
 import { GeneratedImage, AspectRatioOption, ModelOption, ProviderOption, CloudImage, CustomProvider, ServiceMode } from './types';
 import { HistoryGallery } from './components/HistoryGallery';
@@ -20,7 +20,7 @@ import {
   RotateCcw,
   Lock,
 } from 'lucide-react';
-import { getModelConfig, getGuidanceScaleConfig, FLUX_MODELS, HF_MODEL_OPTIONS, GITEE_MODEL_OPTIONS, MS_MODEL_OPTIONS } from './constants';
+import { getModelConfig, getGuidanceScaleConfig, FLUX_MODELS, HF_MODEL_OPTIONS, GITEE_MODEL_OPTIONS, MS_MODEL_OPTIONS, LIVE_MODELS } from './constants';
 import { PromptInput } from './components/PromptInput';
 import { ControlPanel } from './components/ControlPanel';
 import { PreviewStage } from './components/PreviewStage';
@@ -335,8 +335,7 @@ export default function App() {
         const currentHist = historyRef.current;
         const pendingVideos = currentHist.filter(img => 
             img.videoStatus === 'generating' && 
-            img.videoTaskId && 
-            img.videoProvider === 'gitee'
+            img.videoTaskId
         );
         
         if (pendingVideos.length === 0) return;
@@ -345,9 +344,21 @@ export default function App() {
         const updates = await Promise.all(pendingVideos.map(async (img) => {
             if (!img.videoTaskId) return null;
             try {
-                const result = await getGiteeTaskStatus(img.videoTaskId);
-                if (result.status === 'success' || result.status === 'failed') {
-                    return { id: img.id, ...result };
+                if (img.videoProvider === 'gitee') {
+                    const result = await getGiteeTaskStatus(img.videoTaskId);
+                    if (result.status === 'success' || result.status === 'failed') {
+                        return { id: img.id, ...result };
+                    }
+                } else if (img.videoProvider) {
+                    // Try Custom Provider
+                    const customProviders = getCustomProviders();
+                    const provider = customProviders.find(p => p.id === img.videoProvider);
+                    if (provider) {
+                        const result = await getCustomTaskStatus(provider, img.videoTaskId);
+                        if (result.status === 'success' || result.status === 'failed') {
+                            return { id: img.id, ...result };
+                        }
+                    }
                 }
                 return null;
             } catch (e) {
@@ -606,7 +617,29 @@ export default function App() {
     setIsUpscaling(true);
     setError(null);
     try {
-        const { url: newUrl } = await upscaler(currentImage.url);
+        const config = getUpscalerModelConfig(); // { provider, model }
+        
+        let newUrl = '';
+
+        if (config.provider === 'huggingface') {
+            // Default HF logic (RealESRGAN)
+            const result = await upscaler(currentImage.url);
+            newUrl = result.url;
+        } else {
+            // Check for Custom Provider
+            const customProviders = getCustomProviders();
+            const activeProvider = customProviders.find(p => p.id === config.provider);
+            
+            if (activeProvider) {
+                const result = await upscaleImageCustom(activeProvider, config.model, currentImage.url);
+                newUrl = result.url;
+            } else {
+                // Fallback to HF
+                const result = await upscaler(currentImage.url);
+                newUrl = result.url;
+            }
+        }
+
         setTempUpscaledImage(newUrl);
         setIsComparing(true);
     } catch (err: any) {
@@ -743,12 +776,55 @@ export default function App() {
       // If already generating, do nothing
       if (currentImage.videoStatus === 'generating') return;
 
+      // Get configured Live Model
+      let liveConfig = getLiveModelConfig(); // { provider, model }
+
+      // --- NEW LOGIC: Dynamic fallback to available live models ---
+      const serviceMode = getServiceMode();
+      const customProviders = getCustomProviders();
+      let availableLiveModels: { provider: string, model: string }[] = [];
+
+      // 1. Base Providers
+      if (serviceMode === 'local' || serviceMode === 'hydration') {
+          LIVE_MODELS.forEach(m => {
+              // m.value is "provider:modelId"
+              const parts = m.value.split(':');
+              if (parts.length >= 2) {
+                  availableLiveModels.push({ provider: parts[0], model: parts.slice(1).join(':') });
+              }
+          });
+      }
+
+      // 2. Custom Providers
+      if (serviceMode === 'server' || serviceMode === 'hydration') {
+          customProviders.forEach(cp => {
+              if (cp.models.video) {
+                  cp.models.video.forEach(m => {
+                      availableLiveModels.push({ provider: cp.id, model: m.id });
+                  });
+              }
+          });
+      }
+
+      // Check if configured model is in available list
+      const isConfigValid = availableLiveModels.some(
+          m => m.provider === liveConfig.provider && m.model === liveConfig.model
+      );
+
+      if (!isConfigValid && availableLiveModels.length > 0) {
+          // Fallback to first available
+          liveConfig = availableLiveModels[0];
+          console.log("Live model fallback to:", liveConfig);
+      } else if (availableLiveModels.length === 0) {
+          setError(t.liveNotSupported || "No Live models available");
+          return;
+      }
+      // --- END NEW LOGIC ---
+
       // Start Generation
       let width = imageDimensions?.width || 1024;
       let height = imageDimensions?.height || 1024;
 
-      // Get configured Live Model
-      const liveConfig = getLiveModelConfig(); // { provider, model }
       const currentVideoProvider = liveConfig.provider as ProviderOption;
 
       // Prepare Image Input
@@ -820,19 +896,12 @@ export default function App() {
               }
           } else {
               // Custom Video Provider
-              // For custom, we convert Blob to string URL if needed or handle upload?
-              // The generateCustomVideo service expects a string URL currently.
-              // If we have a blob, we might need to upload it somewhere first.
-              // For now, if we have a blob, create a temporary object URL? No, that's local.
-              // Custom providers typically need a publicly accessible URL or base64.
-              // Assuming custom provider can handle the original URL if not blob.
-              // If we have blob, let's revert to original URL and hope custom provider can fetch it.
-              
               const customProviders = getCustomProviders();
               const activeProvider = customProviders.find(p => p.id === currentVideoProvider);
               if (activeProvider) {
                   const settings = getVideoSettings(currentVideoProvider);
-                  const videoUrl = await generateCustomVideo(
+                  // generateCustomVideo now returns object with url or taskId
+                  const result = await generateCustomVideo(
                       activeProvider, 
                       liveConfig.model, 
                       currentImage.url, // Pass original URL for custom
@@ -843,12 +912,22 @@ export default function App() {
                       settings.guidance
                   );
                   
-                  const successImage = { ...loadingImage, videoStatus: 'success', videoUrl } as GeneratedImage;
-                  setHistory(prev => prev.map(img => img.id === successImage.id ? successImage : img));
-                  setCurrentImage(prev => (prev && prev.id === successImage.id) ? successImage : prev);
-                  
-                  if (currentImageRef.current?.id === successImage.id) {
-                      setIsLiveMode(true);
+                  if (result.taskId) {
+                      // Async: Task created
+                      const taskedImage = { ...loadingImage, videoTaskId: result.taskId } as GeneratedImage;
+                      setCurrentImage(taskedImage);
+                      setHistory(prev => prev.map(img => img.id === taskedImage.id ? taskedImage : img));
+                  } else if (result.url) {
+                      // Sync: URL returned immediately
+                      const successImage = { ...loadingImage, videoStatus: 'success', videoUrl: result.url } as GeneratedImage;
+                      setHistory(prev => prev.map(img => img.id === successImage.id ? successImage : img));
+                      setCurrentImage(prev => (prev && prev.id === successImage.id) ? successImage : prev);
+                      
+                      if (currentImageRef.current?.id === successImage.id) {
+                          setIsLiveMode(true);
+                      }
+                  } else {
+                      throw new Error("Invalid response from video provider");
                   }
               } else {
                   throw new Error(t.liveNotSupported || "Live provider not supported");

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
     Hand, 
@@ -135,7 +136,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 if (galleryLocalUrls[file.key]) continue;
 
                 try {
-                    const blob = await fetchCloudBlob(file.url);
+                    const blob = await fetchCloudBlob(file.url as string);
                     if (!isCancelled) {
                         const url = URL.createObjectURL(blob);
                         setGalleryLocalUrls(prev => ({ ...prev, [file.key]: url }));
@@ -351,7 +352,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         img.onerror = () => {
             console.error("Failed to load image via proxy:", url);
         };
-        img.src = getProxyUrl(url);
+        img.src = provider === 'gitee' || provider === 'modelscope' ? getProxyUrl(url) : url;
     };
 
     const handleHistorySelect = (historyItem: GeneratedImage) => {
@@ -685,7 +686,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     };
 
     const urlToBlob = async (url: string): Promise<Blob> => {
-        const fetchUrl = getProxyUrl(url);
+        const fetchUrl = provider === 'gitee' || provider === 'modelscope' ? getProxyUrl(url) : url;
         const response = await fetch(fetchUrl);
         return await response.blob();
     };
@@ -769,7 +770,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         let fileName = `edited_image_${Date.now()}`;
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-        if (provider === 'gitee') {
+        if (provider === 'gitee' || provider === 'modelscope') {
             const link = document.createElement('a');
             link.href = url;
             link.download = fileName;
@@ -780,7 +781,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         }
 
         try {
-            const fetchUrl = getProxyUrl(url); 
+            const fetchUrl = url; 
             const response = await fetch(fetchUrl);
             if (!response.ok) throw new Error('Network response was not ok');
             let blob = await response.blob();

@@ -80,12 +80,12 @@ export const ImageToolbar: React.FC<ImageToolbarProps> = ({
     // Logic for button visibility:
     // 1. Details, NSFW, Download, Delete -> Always
     // 2. Live -> Always (supported via cross-provider handling)
-    // 3. Upscale -> If provider is HF
+    // 3. Upscale -> Always available (now uses Settings config)
     // 4. Upload -> If storage configured
     
     // Live button is now enabled for all images
     const showLiveButton = !isLiveMode; // Only hide if actively viewing the video (replaced by 'Image' button in PreviewStage)
-    const showUpscaleButton = imgProvider === 'huggingface';
+    const showUpscaleButton = !isLiveMode; // Upscale is available unless in video mode
     const showUploadButton = isStorageEnabled;
     
     const isBusy = isLiveGenerating || isGeneratingVideoPrompt;
@@ -154,8 +154,8 @@ export const ImageToolbar: React.FC<ImageToolbarProps> = ({
                             </>
                         )}
 
-                        {/* Upscale Button - Conditionally Rendered for Hugging Face only, and NOT in Live mode */}
-                        {showUpscaleButton && !isLiveMode && (
+                        {/* Upscale Button - Always shown if not live mode */}
+                        {showUpscaleButton && (
                             <>
                                 <Tooltip content={isUpscaling ? t.upscaling : t.upscale}>
                                     <button
