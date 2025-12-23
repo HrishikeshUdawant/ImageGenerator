@@ -478,7 +478,7 @@ export default function App() {
       return new Promise((resolve, reject) => {
           const img = new Image();
           img.crossOrigin = "Anonymous";
-          img.src = useProxy ? `https://serveproxy.com/?url=${url}` : url;
+          img.src = useProxy ? `https://peinture-proxy.9th.xyz/?url=${url}` : url;
           img.onload = () => {
                const canvas = document.createElement('canvas');
                canvas.width = img.naturalWidth;
@@ -874,21 +874,25 @@ export default function App() {
     if (isDownloading) return;
     setIsDownloading(true);
 
-    imageUrl = currentImage.provider === 'gitee' || currentImage.provider === 'modelscope' ? `https://serveproxy.com/?url=${imageUrl}` : imageUrl
-
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
     try {
+        if (currentImage.provider === 'gitee' || currentImage.provider === 'modelscope') {
+            const link = document.createElement('a');
+            link.href = imageUrl;
+            if (isMobile) link.target = '_blank';
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setIsDownloading(false);
+            return;
+        }
+
       // 1. Fetch blob (handles CORS if server allows, and Data URLs)
       let response: Response;
-      try {
-          response = await fetch(imageUrl, { mode: 'cors' });
-          if (!response.ok) throw new Error('Network response was not ok');
-      } catch (e) {
-          console.warn("Fetch failed, trying fallback");
-          // Last resort: Open URL directly.
-          window.open(imageUrl, '_blank');
-          setIsDownloading(false);
-          return;
-      }
+      response = await fetch(imageUrl);
+      if (!response.ok) throw new Error('Network response was not ok');
       
       let blob = await response.blob();
 
@@ -941,8 +945,6 @@ export default function App() {
       fileName = base + ext;
 
       // 4. Mobile Strategy: Web Share API (Primary for iOS/Mobile)
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
       if (isMobile) {
           const file = new File([blob], fileName, { type: blob.type });
           
@@ -977,9 +979,7 @@ export default function App() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      // Cleanup
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+      window.URL.revokeObjectURL(blobUrl);
 
     } catch (e) {
       console.error("Download failed", e);
@@ -1003,11 +1003,10 @@ export default function App() {
         
         // Extract metadata and context
         const context = metadata || (currentImage ? { ...currentImage } : {});
-        const isModelScope = context.provider === 'modelscope';
 
         if (typeof imageBlobOrUrl === 'string') {
             if (context.provider === 'modelscope' || context.provider === 'gitee') {
-                const fetchUrl = `https://serveproxy.com/?url=${imageBlobOrUrl}`;
+                const fetchUrl = `https://peinture-proxy.9th.xyz/?url=${imageBlobOrUrl}`;
                 const response = await fetch(fetchUrl);
                 if (!response.ok) throw new Error("Failed to fetch image for upload");
                 blob = await response.blob();
@@ -1218,6 +1217,8 @@ export default function App() {
                                         if (currentImage.isBlurred) {
                                             fileName += '.NSFW';
                                         }
+                                        const getExt = (url: string) => new URL(url).pathname.split('.').pop();
+                                        fileName += `.${getExt(currentImage.url)}`
                                         handleUploadToCloud(currentImage.url, fileName);
                                     }
                                 }}

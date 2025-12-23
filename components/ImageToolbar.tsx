@@ -86,7 +86,7 @@ export const ImageToolbar: React.FC<ImageToolbarProps> = ({
     // Live button is now enabled for all images
     const showLiveButton = !isLiveMode; // Only hide if actively viewing the video (replaced by 'Image' button in PreviewStage)
     const showUpscaleButton = imgProvider === 'huggingface';
-    const showUploadButton = isStorageEnabled && imgProvider !== 'huggingface';
+    const showUploadButton = isStorageEnabled;
     
     const isBusy = isLiveGenerating || isGeneratingVideoPrompt;
     // Disable live button if busy (generating) OR if already in Live Mode (viewing video)
