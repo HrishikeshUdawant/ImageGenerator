@@ -216,11 +216,16 @@ export const getCustomTaskStatus = async (
         headers['Authorization'] = `Bearer ${provider.token}`;
     }
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s Timeout
+
     try {
         const response = await fetch(`${baseUrl}/v1/task-status?taskId=${taskId}`, {
             method: 'GET',
-            headers
+            headers,
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
         
         if (!response.ok) throw new Error('Failed to check task status');
         
@@ -238,8 +243,13 @@ export const getCustomTaskStatus = async (
         
         return result;
     } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            console.warn("Check Custom Task Status Timed out");
+            // Return 'processing' so polling continues next time rather than failing hard
+            return { status: 'processing' };
+        }
         console.error("Check Custom Task Status Error:", error);
-        // Don't fail the whole polling, just return status as is or error
         return { status: 'error', error: error.message };
     }
 };

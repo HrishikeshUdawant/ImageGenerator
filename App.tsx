@@ -966,6 +966,7 @@ export default function App() {
         let finalFileName = fileName || `generated-${generateUUID()}`;
         
         // Extract metadata and context
+        // If uploading specific resource type (like video), metadata might already have type set
         const context = metadata || (currentImage ? { ...currentImage } : {});
 
         if (typeof imageBlobOrUrl === 'string') {
@@ -1019,11 +1020,17 @@ export default function App() {
   // So we ONLY hide if isWorking (main image gen).
   const shouldHideToolbar = isWorking; 
 
-  // Check if current image is already uploaded
+  // Check if current image OR video is already uploaded based on mode
   const isCurrentUploaded = useMemo(() => {
       if (!currentImage) return false;
-      return cloudHistory.some(ci => ci.fileName && ci.fileName.includes(currentImage.id));
-  }, [currentImage, cloudHistory]);
+      if (isLiveMode && currentImage.videoUrl) {
+          // Check for video filename match in cloud history
+          return cloudHistory.some(ci => ci.fileName && ci.fileName.includes(`video-${currentImage.id}`));
+      } else {
+          // Check for image filename match in cloud history (exclude video prefix to be safe)
+          return cloudHistory.some(ci => ci.fileName && ci.fileName.includes(currentImage.id) && !ci.fileName.includes('video-'));
+      }
+  }, [currentImage, cloudHistory, isLiveMode]);
 
   // Stable callbacks for Header
   const handleOpenSettings = useCallback(() => setShowSettings(true), []);
@@ -1164,15 +1171,24 @@ export default function App() {
                                 isLiveGenerating={isLiveGenerating}
                                 provider={provider}
                                 // Cloud Upload Props
-                                handleUploadToS3={() => {
+                                handleUploadToS3={async () => {
                                     if (currentImage) {
-                                        let fileName = currentImage.id || `image-${Date.now()}`;
-                                        if (currentImage.isBlurred) {
-                                            fileName += '.NSFW';
+                                        // Mode-specific upload logic
+                                        if (isLiveMode && currentImage.videoUrl) {
+                                            // Upload Video
+                                            const ext = currentImage.videoUrl.includes('.mp4') ? '.mp4' : '.webm';
+                                            const fileName = `video-${currentImage.id}${ext}`;
+                                            await handleUploadToCloud(currentImage.videoUrl, fileName, { ...currentImage, type: 'video' });
+                                        } else {
+                                            // Upload Image
+                                            let fileName = currentImage.id || `image-${Date.now()}`;
+                                            if (currentImage.isBlurred) {
+                                                fileName += '.NSFW';
+                                            }
+                                            const getExt = (url: string) => new URL(url).pathname.split('.').pop();
+                                            fileName += `.${getExt(currentImage.url)}`
+                                            await handleUploadToCloud(currentImage.url, fileName);
                                         }
-                                        const getExt = (url: string) => new URL(url).pathname.split('.').pop();
-                                        fileName += `.${getExt(currentImage.url)}`
-                                        handleUploadToCloud(currentImage.url, fileName);
                                     }
                                 }}
                                 isUploading={isUploading}

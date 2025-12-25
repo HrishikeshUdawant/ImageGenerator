@@ -10,7 +10,7 @@ import {
     Sparkles, 
     ArrowRight,
     Upload,
-    X,
+    X, 
     LogOut,
     Keyboard,
     Minus,
@@ -418,6 +418,34 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         setContextMenu(null);
     };
 
+    const handleWheel = useCallback((e: WheelEvent) => {
+        e.preventDefault(); 
+        e.stopPropagation(); 
+        if (!containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const cx = rect.width / 2;
+        const cy = rect.height / 2;
+        const delta = e.deltaY > 0 ? 0.95 : 1.05;
+        const newScale = Math.min(Math.max(0.1, scale * delta), 10);
+        const newOffsetX = cx - (cx - offset.x) * (newScale / scale);
+        const newOffsetY = cy - (cy - offset.y) * (newScale / scale);
+        setScale(newScale);
+        setOffset({ x: newOffsetX, y: newOffsetY });
+    }, [scale, offset]);
+
+    // Attach non-passive wheel listener
+    useEffect(() => {
+        const container = containerRef.current;
+        if (container) {
+            container.addEventListener('wheel', handleWheel, { passive: false });
+        }
+        return () => {
+            if (container) {
+                container.removeEventListener('wheel', handleWheel);
+            }
+        };
+    }, [handleWheel]);
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const isMod = isMac ? e.metaKey : e.altKey;
@@ -657,21 +685,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         } else {
             handleMouseMove(e);
         }
-    };
-
-    const handleWheel = (e: React.WheelEvent) => {
-        e.preventDefault(); 
-        e.stopPropagation(); 
-        if (!containerRef.current) return;
-        const rect = containerRef.current.getBoundingClientRect();
-        const cx = rect.width / 2;
-        const cy = rect.height / 2;
-        const delta = e.deltaY > 0 ? 0.95 : 1.05;
-        const newScale = Math.min(Math.max(0.1, scale * delta), 10);
-        const newOffsetX = cx - (cx - offset.x) * (newScale / scale);
-        const newOffsetY = cy - (cy - offset.y) * (newScale / scale);
-        setScale(newScale);
-        setOffset({ x: newOffsetX, y: newOffsetY });
     };
 
     const handleContextMenu = (e: React.MouseEvent) => {
@@ -1078,7 +1091,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleMouseUp}
-                    onWheel={handleWheel}
+                    // onWheel logic removed from here, handled via ref
                 >
                     {image && (
                         <img 
