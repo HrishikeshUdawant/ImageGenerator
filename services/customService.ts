@@ -189,8 +189,15 @@ export const generateCustomVideo = async (
         return { taskId: data.taskId };
     }
     
-    // Check for sync URL (string or object with url array)
-    const videoUrl = typeof data === 'string' ? data : (data.url ? data.url[0] : null);
+    // Check for sync URL (string or object with url array or url string)
+    let videoUrl: string | null = null;
+    
+    if (typeof data === 'string') {
+        videoUrl = data;
+    } else if (data.url) {
+        // Handle both array (HF style) and string (Custom style)
+        videoUrl = Array.isArray(data.url) ? data.url[0] : data.url;
+    }
     
     if (videoUrl) {
         return { url: videoUrl };
@@ -218,12 +225,13 @@ export const getCustomTaskStatus = async (
         if (!response.ok) throw new Error('Failed to check task status');
         
         const data = await response.json();
-        // Expected data structure: { status: "success" | "failed", id?: string, url?: string[], error?: string }
+        // Expected data structure: { status: "success" | "failed", id?: string, url?: string | string[], error?: string }
         
         const result: {status: string, videoUrl?: string, error?: string} = { status: data.status || 'processing' };
         
-        if (data.status === 'success' && data.url && data.url.length > 0) {
-            result.videoUrl = data.url[0];
+        if (data.status === 'success' && data.url) {
+            // Handle both array (HF style) and string (Custom style)
+            result.videoUrl = Array.isArray(data.url) ? data.url[0] : data.url;
         } else if (data.status === 'failed') {
             result.error = data.error || 'Video generation failed';
         }
@@ -266,11 +274,12 @@ export const optimizePromptCustom = async (
 
 export const upscaleImageCustom = async (
     provider: CustomProvider,
-    model: string, // Kept for future flexibility if custom provider supports multiple upscalers
+    model: string,
     imageUrl: string
 ): Promise<{ url: string }> => {
     const baseUrl = cleanUrl(provider.apiUrl);
     const body = {
+        model,
         imageUrl
     };
 

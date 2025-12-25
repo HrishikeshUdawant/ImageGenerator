@@ -30,10 +30,10 @@ import {
 } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { editImageQwen } from '../services/hfService';
-import { editImageGitee } from '../services/giteeService';
-import { editImageMS } from '../services/msService';
-import { editImageCustom } from '../services/customService';
-import { optimizeEditPrompt, getEditModelConfig, getCustomProviders } from '../services/utils';
+import { editImageGitee, optimizePromptGitee } from '../services/giteeService';
+import { editImageMS, optimizePromptMS } from '../services/msService';
+import { editImageCustom, optimizePromptCustom } from '../services/customService';
+import { optimizeEditPrompt, getEditModelConfig, getCustomProviders, fetchBlob, downloadImage, getTextModelConfig } from '../services/utils';
 import { isStorageConfigured, listCloudFiles, fetchCloudBlob, getStorageType } from '../services/storageService';
 import { ProviderOption, GeneratedImage, CloudFile } from '../types';
 import { PROVIDER_OPTIONS } from '../constants';
@@ -165,11 +165,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     // Initialize provider from unified config
     useEffect(() => {
         const config = getEditModelConfig();
-        // Since setProvider is passed from parent, we can sync if needed, 
-        // OR we just use the config directly in generate.
-        // The UI provider selector updates `provider` prop via `setProvider`.
-        // If we want the Unified Settings to take precedence, we should rely on `getEditModelConfig()` during generation.
-        // However, the UI dropdown shows `provider`. We can sync it on mount.
         if (config.provider) {
             setProvider(config.provider as ProviderOption);
         }
@@ -222,15 +217,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             abortControllerRef.current?.abort();
         };
     }, []);
-
-    // Helper to proxy URLs to bypass CORS restrictions
-    const getProxyUrl = (url: string) => {
-        if (!url) return '';
-        // Check if it's a data URL or blob URL (local), return as is
-        if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-        
-        return `https://peinture-proxy.9th.xyz/?url=${url}`;
-    };
 
     // --- History Management ---
     
@@ -313,46 +299,56 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         }
     };
 
-    const loadEditorImage = (url: string) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-            setImage(img);
-            setGeneratedResult(null);
-            setCommand('');
-            setAttachedImages([]);
-            if (canvasRef.current && containerRef.current) {
-                 canvasRef.current.width = img.width;
-                 canvasRef.current.height = img.height;
-                 const ctx = canvasRef.current.getContext('2d');
-                 if (ctx) {
-                     ctx.clearRect(0, 0, img.width, img.height);
-                     try {
-                        const initialData = ctx.getImageData(0, 0, img.width, img.height);
-                        setHistoryStates([initialData]); 
-                        setHistoryIndex(0);
-                     } catch (e) {
-                        // Outputting system error messages is prohibited.
-                        console.error("Failed to read image data (CORS restriction):");
-                        setHistoryStates([]);
-                        setHistoryIndex(-1);
+    const loadEditorImage = async (url: string) => {
+        try {
+            // Use unified fetchBlob to handle potential CORS issues via proxy fallback
+            const blob = await fetchBlob(url);
+            const objectUrl = URL.createObjectURL(blob);
+            
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                setImage(img);
+                setGeneratedResult(null);
+                setCommand('');
+                setAttachedImages([]);
+                if (canvasRef.current && containerRef.current) {
+                     canvasRef.current.width = img.width;
+                     canvasRef.current.height = img.height;
+                     const ctx = canvasRef.current.getContext('2d');
+                     if (ctx) {
+                         ctx.clearRect(0, 0, img.width, img.height);
+                         try {
+                            const initialData = ctx.getImageData(0, 0, img.width, img.height);
+                            setHistoryStates([initialData]); 
+                            setHistoryIndex(0);
+                         } catch (e) {
+                            console.error("Failed to read image data (CORS restriction):");
+                            setHistoryStates([]);
+                            setHistoryIndex(-1);
+                         }
                      }
-                 }
-                 const { width: contW, height: contH } = containerRef.current.getBoundingClientRect();
-                 const scaleH = contH / img.height;
-                 const scaleW = contW / img.width;
-                 const newScale = Math.min(scaleH, scaleW, 1);
-                 setScale(newScale);
-                 setOffset({
-                     x: (contW - img.width * newScale) / 2,
-                     y: (contH - img.height * newScale) / 2
-                 });
-            }
-        };
-        img.onerror = () => {
-            console.error("Failed to load image via proxy:", url);
-        };
-        img.src = provider === 'gitee' || provider === 'modelscope' ? getProxyUrl(url) : url;
+                     const { width: contW, height: contH } = containerRef.current.getBoundingClientRect();
+                     const scaleH = contH / img.height;
+                     const scaleW = contW / img.width;
+                     const newScale = Math.min(scaleH, scaleW, 1);
+                     setScale(newScale);
+                     setOffset({
+                         x: (contW - img.width * newScale) / 2,
+                         y: (contH - img.height * newScale) / 2
+                     });
+                }
+                // Revoke object URL after loading
+                URL.revokeObjectURL(objectUrl);
+            };
+            img.onerror = () => {
+                console.error("Failed to load image via object URL:", url);
+                URL.revokeObjectURL(objectUrl);
+            };
+            img.src = objectUrl;
+        } catch (e) {
+            console.error("Failed to fetch image for editor:", e);
+        }
     };
 
     const handleHistorySelect = (historyItem: GeneratedImage) => {
@@ -685,12 +681,6 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         }
     };
 
-    const urlToBlob = async (url: string): Promise<Blob> => {
-        const fetchUrl = provider === 'gitee' || provider === 'modelscope' ? getProxyUrl(url) : url;
-        const response = await fetch(fetchUrl);
-        return await response.blob();
-    };
-
     const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> => {
         return new Promise((resolve, reject) => {
             canvas.toBlob((blob) => {
@@ -768,107 +758,24 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     const handleDownloadResult = async (url: string) => {
         setIsDownloading(true);
         let fileName = `edited_image_${Date.now()}`;
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-        if (provider === 'gitee' || provider === 'modelscope') {
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = fileName;
-            if (isMobile) link.target = "_blank"
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
+        
         try {
-            const fetchUrl = url; 
-            const response = await fetch(fetchUrl);
-            if (!response.ok) throw new Error('Network response was not ok');
-            let blob = await response.blob();
-            if (blob.type.startsWith('image') && (blob.type === 'image/webp' || url.includes('.webp'))) {
-                try {
-                    const img = new Image();
-                    img.crossOrigin = "Anonymous";
-                    const blobUrl = URL.createObjectURL(blob);
-                    await new Promise((resolve, reject) => {
-                        img.onload = resolve;
-                        img.onerror = reject;
-                        img.src = blobUrl;
-                    });
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.naturalWidth;
-                    canvas.height = img.naturalHeight;
-                    const ctx = canvas.getContext('2d');
-                    if (ctx) {
-                        ctx.drawImage(img, 0, 0);
-                        const pngBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
-                        if (pngBlob) {
-                            blob = pngBlob;
-                            fileName = fileName.replace(/\.webp$/i, '.png');
-                            if (!fileName.endsWith('.png')) fileName += '.png';
-                        }
-                    }
-                    URL.revokeObjectURL(blobUrl);
-                } catch (e) {
-                    // Outputting system error messages is prohibited.
-                    console.warn("Conversion failed, using original blob");
-                }
-            }
-
-            // --- Filename logic start ---
-            const blobType = blob.type.split('/')[1] || 'png';
+            // Filename prep
+            let base = fileName;
+            let ext = '.png';
             
-            // Determine if filename already has an extension
-            const hasExtension = fileName.match(/\.[a-zA-Z0-9]+$/);
-            let ext = hasExtension ? hasExtension[0] : `.${blobType}`;
-            let base = hasExtension ? fileName.replace(/\.[a-zA-Z0-9]+$/, '') : fileName;
-
-            // Inject NSFW suffix if needed
+            // Check original URL/Blob for details if possible, but unified logic suggests standard download
             if (isSourceNSFW && !base.toUpperCase().endsWith('.NSFW')) {
                 base += '.NSFW';
             }
-            
             fileName = base + ext;
-            // --- Filename logic end ---
 
-            if (isMobile) {
-                const file = new File([blob], fileName, { type: blob.type });
-                const nav = navigator as any;
-                if (nav.canShare && nav.canShare({ files: [file] })) {
-                    try {
-                        await nav.share({ files: [file], title: 'Peinture AI Asset' });
-                        setIsDownloading(false);
-                        return;
-                    } catch (e) {
-                        // Outputting system error messages is prohibited.
-                        if (e.name === 'AbortError') {
-                            setIsDownloading(false);
-                            return;
-                        }
-                    }
-                }
-            }
-            const blobUrl = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = blobUrl;
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+            // Use unified download utility
+            await downloadImage(url, fileName);
+
         } catch (e) {
-            console.error("Download failed, falling back to window.open", e);
-            try {
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = fileName;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            } catch (err) {
-                // Outputting system error messages is prohibited.
-                window.open(url, '_blank');
-            }
+            console.error("Download failed", e);
+            window.open(url, '_blank');
         } finally {
             setIsDownloading(false);
         }
@@ -877,7 +784,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     const onCloudUpload = async () => {
         if (!generatedResult || !handleUploadToS3) return;
         try {
-            const blob = await urlToBlob(generatedResult);
+            // Use unified fetchBlob which handles proxy fallback
+            const blob = await fetchBlob(generatedResult);
             // Construct metadata object
             const metadata = {
                 prompt: command,
@@ -923,7 +831,33 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 ctx.drawImage(mergedCanvas, 0, 0, w, h);
             }
             const base64 = tempCanvas.toDataURL('image/jpeg', 0.8); 
-            const optimized = await optimizeEditPrompt(base64, command);
+            
+            // NEW LOGIC: Dispatch optimization based on Text Model setting
+            const textConfig = getTextModelConfig();
+            let optimized = '';
+
+            if (textConfig.provider === 'huggingface') {
+                 // Use optimizeEditPrompt (Vision supported via Pollinations) with dynamic model
+                 optimized = await optimizeEditPrompt(base64, command, textConfig.model);
+            } else if (textConfig.provider === 'gitee') {
+                 // Use text-only prompt optimization
+                 optimized = await optimizePromptGitee(command);
+            } else if (textConfig.provider === 'modelscope') {
+                 // Use text-only prompt optimization
+                 optimized = await optimizePromptMS(command);
+            } else {
+                 // Custom Provider
+                 const customProviders = getCustomProviders();
+                 const activeCustom = customProviders.find(p => p.id === textConfig.provider);
+                 if (activeCustom) {
+                     // Custom optimization (usually text-only)
+                     optimized = await optimizePromptCustom(activeCustom, textConfig.model, command);
+                 } else {
+                     // Fallback to default Pollinations
+                     optimized = await optimizeEditPrompt(base64, command);
+                 }
+            }
+
             if (optimized) setCommand(optimized);
         } catch (e) {
             // Outputting system error messages is prohibited.
@@ -950,7 +884,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
             const imageBlobs: Blob[] = [];
             let promptSuffix = `\n${t.prompt_original_image}`;
             let currentImageIndexInAPI = 1;
-            const originalBlob = await urlToBlob(image.src);
+            // Use fetchBlob for robustness
+            const originalBlob = await fetchBlob(image.src);
             imageBlobs.push(originalBlob);
             if (hasDrawings) {
                 const mergedCanvas = getMergedLayer();
@@ -963,7 +898,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 }
             }
             for (let i = 0; i < attachedImages.length; i++) {
-                const refBlob = dataURLToBlob(attachedImages[i]);
+                // attachedImages are dataURLs, fetchBlob handles this fine too
+                const refBlob = await fetchBlob(attachedImages[i]);
                 imageBlobs.push(refBlob);
                 currentImageIndexInAPI++;
                 const refNumInUI = i + 1;
@@ -989,6 +925,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                 const customProviders = getCustomProviders();
                 const activeCustom = customProviders.find(p => p.id === activeProvider);
                 if (activeCustom) {
+                    // Explicitly pass config.model
                     result = await editImageCustom(activeCustom, config.model, imageBlobs, finalPrompt, undefined, undefined, undefined);
                 } else {
                     // Fallback to HF if config is stale
@@ -1165,7 +1102,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                                 beforeImage={image.src} 
                                 afterImage={generatedResult} 
                                 alt="Comparison" 
-                                labelBefore={t.compare_original}
+                                labelBefore={t.compare_original} 
                                 labelAfter={t.compare_edited}
                              />
                              
