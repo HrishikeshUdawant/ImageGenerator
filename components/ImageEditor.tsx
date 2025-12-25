@@ -57,6 +57,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     const snapshotRef = useRef<ImageData | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const activeObjectUrlRef = useRef<string | null>(null);
     
     // Core State
     const [image, setImage] = useState<HTMLImageElement | null>(null);
@@ -159,6 +160,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     useEffect(() => {
         return () => {
             Object.values(galleryLocalUrls).forEach(url => URL.revokeObjectURL(url));
+            if (activeObjectUrlRef.current) {
+                URL.revokeObjectURL(activeObjectUrlRef.current);
+            }
         };
     }, []);
 
@@ -218,6 +222,14 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         };
     }, []);
 
+    // Helper to cleanup active object URL
+    const cleanupActiveObjectUrl = () => {
+        if (activeObjectUrlRef.current) {
+            URL.revokeObjectURL(activeObjectUrlRef.current);
+            activeObjectUrlRef.current = null;
+        }
+    };
+
     // --- History Management ---
     
     const saveToHistory = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
@@ -257,39 +269,44 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     const processFile = useCallback((file: File) => {
         if (!file.type.startsWith('image/')) return;
         setIsSourceNSFW(file.name.toUpperCase().includes('.NSFW'));
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            if (event.target?.result) {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => {
-                    setImage(img);
-                    setGeneratedResult(null);
-                    if (canvasRef.current && containerRef.current) {
-                         canvasRef.current.width = img.width;
-                         canvasRef.current.height = img.height;
-                         const ctx = canvasRef.current.getContext('2d');
-                         if (ctx) {
-                             ctx.clearRect(0, 0, img.width, img.height);
-                             const initialData = ctx.getImageData(0, 0, img.width, img.height);
-                             setHistoryStates([initialData]); 
-                             setHistoryIndex(0);
-                         }
-                         const { width: contW, height: contH } = containerRef.current.getBoundingClientRect();
-                         const scaleH = contH / img.height;
-                         const scaleW = contW / img.width;
-                         const newScale = Math.min(scaleH, scaleW, 1);
-                         setScale(newScale);
-                         setOffset({
-                             x: (contW - img.width * newScale) / 2,
-                             y: (contH - img.height * newScale) / 2
-                         });
-                    }
-                };
-                img.src = event.target.result as string;
+        
+        // Cleanup previous Blob URL if exists
+        cleanupActiveObjectUrl();
+
+        const objectUrl = URL.createObjectURL(file);
+        activeObjectUrlRef.current = objectUrl;
+
+        const img = new Image();
+        // Remove crossOrigin setting for local blob URLs to avoid CORS issues
+        img.onload = () => {
+            setImage(img);
+            setGeneratedResult(null);
+            if (canvasRef.current && containerRef.current) {
+                 canvasRef.current.width = img.width;
+                 canvasRef.current.height = img.height;
+                 const ctx = canvasRef.current.getContext('2d');
+                 if (ctx) {
+                     ctx.clearRect(0, 0, img.width, img.height);
+                     const initialData = ctx.getImageData(0, 0, img.width, img.height);
+                     setHistoryStates([initialData]); 
+                     setHistoryIndex(0);
+                 }
+                 const { width: contW, height: contH } = containerRef.current.getBoundingClientRect();
+                 const scaleH = contH / img.height;
+                 const scaleW = contW / img.width;
+                 const newScale = Math.min(scaleH, scaleW, 1);
+                 setScale(newScale);
+                 setOffset({
+                     x: (contW - img.width * newScale) / 2,
+                     y: (contH - img.height * newScale) / 2
+                 });
             }
         };
-        reader.readAsDataURL(file);
+        img.onerror = () => {
+            console.error("Failed to load image from file");
+            cleanupActiveObjectUrl();
+        };
+        img.src = objectUrl;
     }, []);
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -303,10 +320,16 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
         try {
             // Use unified fetchBlob to handle potential CORS issues via proxy fallback
             const blob = await fetchBlob(url);
+            
+            // Cleanup previous active URL
+            cleanupActiveObjectUrl();
+
             const objectUrl = URL.createObjectURL(blob);
+            activeObjectUrlRef.current = objectUrl;
             
             const img = new Image();
-            img.crossOrigin = 'anonymous';
+            // Removed crossOrigin = 'anonymous' for blob URLs created locally to prevent loading issues
+            
             img.onload = () => {
                 setImage(img);
                 setGeneratedResult(null);
@@ -338,16 +361,17 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                          y: (contH - img.height * newScale) / 2
                      });
                 }
-                // Revoke object URL after loading
-                URL.revokeObjectURL(objectUrl);
+                // Do NOT revoke object URL immediately to allow React render to use it
             };
             img.onerror = () => {
                 console.error("Failed to load image via object URL:", url);
-                URL.revokeObjectURL(objectUrl);
+                cleanupActiveObjectUrl();
+                alert(t.error_api_connection || "Failed to load image");
             };
             img.src = objectUrl;
         } catch (e) {
             console.error("Failed to fetch image for editor:", e);
+            alert(t.error_api_connection || "Failed to fetch image");
         }
     };
 
@@ -366,6 +390,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
     };
 
     const handleExit = () => {
+        cleanupActiveObjectUrl();
         setImage(null);
         setHistoryStates([]);
         setHistoryIndex(-1);
@@ -1120,50 +1145,68 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ t, provider, setProvid
                              />
                              
                              <div className="absolute bottom-6 inset-x-0 flex justify-center pointer-events-none z-40">
-                                <div className="pointer-events-auto flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300">
-                                    <button
-                                        onClick={() => setGeneratedResult(null)}
-                                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/70 hover:text-white transition-all shadow-xl hover:shadow-purple-900/10 hover:border-purple-500/30"
-                                    >
-                                        <RotateCcw className="w-5 h-5 text-purple-400" />
-                                        <span className="font-medium text-sm">{t.re_edit}</span>
-                                    </button>
+                                <div className="pointer-events-auto max-w-[90%] overflow-x-auto scrollbar-hide rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+                                    <div className="flex items-center gap-1 p-1.5 min-w-max">
+                                        
+                                        {/* Re-edit */}
+                                        <Tooltip content={t.re_edit}>
+                                            <button
+                                                onClick={() => setGeneratedResult(null)}
+                                                className="flex items-center justify-center w-10 h-10 rounded-xl text-white/70 hover:text-purple-400 hover:bg-white/10 transition-all"
+                                            >
+                                                <RotateCcw className="w-5 h-5" />
+                                            </button>
+                                        </Tooltip>
 
-                                    {/* Upload Button */}
-                                    {isStorageEnabled && provider !== 'modelscope' && (
-                                        <button
-                                            onClick={onCloudUpload}
-                                            disabled={isUploading}
-                                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/70 hover:text-white transition-all shadow-xl hover:shadow-green-900/10 hover:border-green-500/30 ${isUploading ? 'cursor-not-allowed opacity-70' : ''}`}
-                                        >
-                                            {isUploading ? (
-                                                <Loader2 className="w-5 h-5 animate-spin text-green-400" />
-                                            ) : (
-                                                <CloudUpload className="w-5 h-5 text-green-400" />
-                                            )}
-                                            <span className="font-medium text-sm">{isUploading ? t.uploading : t.upload}</span>
-                                        </button>
-                                    )}
+                                        <div className="w-px h-5 bg-white/10 mx-1"></div>
 
-                                    <button
-                                        onClick={() => handleDownloadResult(generatedResult)}
-                                        disabled={isDownloading}
-                                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/70 hover:text-white transition-all shadow-xl hover:shadow-blue-900/10 hover:border-blue-500/30 ${isDownloading ? 'cursor-not-allowed opacity-70' : ''}`}
-                                    >
-                                        {isDownloading ? (
-                                            <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
-                                        ) : (
-                                            <Download className="w-5 h-5 text-blue-400" />
+                                        {/* Upload Button */}
+                                        {isStorageEnabled && provider !== 'modelscope' && (
+                                            <>
+                                                <Tooltip content={isUploading ? t.uploading : t.upload}>
+                                                    <button
+                                                        onClick={onCloudUpload}
+                                                        disabled={isUploading}
+                                                        className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${isUploading ? 'text-green-400 bg-green-500/10 cursor-not-allowed' : 'text-white/70 hover:text-green-400 hover:bg-white/10'}`}
+                                                    >
+                                                        {isUploading ? (
+                                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                                        ) : (
+                                                            <CloudUpload className="w-5 h-5" />
+                                                        )}
+                                                    </button>
+                                                </Tooltip>
+                                                <div className="w-px h-5 bg-white/10 mx-1"></div>
+                                            </>
                                         )}
-                                        <span className="font-medium text-sm">{t.menu_download}</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setShowExitDialog(true)}
-                                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:bg-black/70 hover:text-white transition-all shadow-xl hover:shadow-red-900/10 hover:border-red-500/30"
-                                    >
-                                        <LogOut className="w-5 h-5 text-red-400" />
-                                        <span className="font-medium text-sm">{t.menu_exit}</span>
-                                    </button>
+
+                                        {/* Download */}
+                                        <Tooltip content={t.menu_download}>
+                                            <button
+                                                onClick={() => handleDownloadResult(generatedResult)}
+                                                disabled={isDownloading}
+                                                className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all ${isDownloading ? 'text-blue-400 bg-blue-500/10 cursor-not-allowed' : 'text-white/70 hover:text-blue-400 hover:bg-white/10'}`}
+                                            >
+                                                {isDownloading ? (
+                                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                                ) : (
+                                                    <Download className="w-5 h-5" />
+                                                )}
+                                            </button>
+                                        </Tooltip>
+
+                                        <div className="w-px h-5 bg-white/10 mx-1"></div>
+
+                                        {/* Exit */}
+                                        <Tooltip content={t.menu_exit}>
+                                            <button
+                                                onClick={() => setShowExitDialog(true)}
+                                                className="flex items-center justify-center w-10 h-10 rounded-xl text-white/70 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                            >
+                                                <LogOut className="w-5 h-5" />
+                                            </button>
+                                        </Tooltip>
+                                    </div>
                                 </div>
                              </div>
                         </div>

@@ -363,8 +363,14 @@ export const getProxyUrl = (url: string) => `https://peinture-proxy.9th.xyz/?url
 export const fetchBlob = async (url: string): Promise<Blob> => {
     // Handle data/blob URLs locally without fetching
     if (url.startsWith('data:') || url.startsWith('blob:')) {
-        const res = await fetch(url);
-        return res.blob();
+        try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Local fetch failed: ${res.status}`);
+            return res.blob();
+        } catch (e) {
+            console.warn("Local blob/data URL fetch failed", e);
+            throw new Error("Local resource not found");
+        }
     }
 
     try {
