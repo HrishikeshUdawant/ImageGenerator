@@ -200,31 +200,40 @@ export default function App() {
           
           if (mode === 'server') {
               try {
-                  const models = await fetchServerModels();
-                  // If success, ensure "Server" provider is added
+                  // Attempt to find an existing "Server" provider to reuse its token
+                  const customProviders = getCustomProviders();
+                  const existingServer = customProviders.find(p => p.name === 'Server' && p.apiUrl === '/api');
+                  const storedToken = existingServer?.token;
+
+                  // Call API with stored token (if any)
+                  const models = await fetchServerModels(storedToken);
+                  
+                  // If successful, update or create the "Server" provider in storage
                   const serverProvider: CustomProvider = {
-                      id: generateUUID(), // Should technically be constant to avoid duplicates, but logic handles update
+                      id: existingServer ? existingServer.id : generateUUID(),
                       name: 'Server',
                       apiUrl: '/api',
-                      token: '', // No token needed if successful without 401
+                      token: storedToken || '', // Persist the working token
                       models,
                       enabled: true
                   };
                   
-                  // Check if Server provider already exists to avoid dupes/id changes
-                  const existing = getCustomProviders().find(p => p.name === 'Server' && p.apiUrl === '/api');
-                  if (!existing) {
-                      addCustomProvider(serverProvider);
-                      // Trigger storage event to update control panel
+                  // This updates the storage with fresh models and confirms the token is valid
+                  addCustomProvider(serverProvider);
+                  
+                  // Trigger storage event to update control panel if it wasn't there
+                  if (!existingServer) {
                       window.dispatchEvent(new Event("storage"));
                   }
                   
                   // Force selection of first model if not set
                   if (models.generate && models.generate.length > 0) {
-                      const firstModel = models.generate[0].id;
-                      const providerId = existing ? existing.id : serverProvider.id;
-                      setProvider(providerId);
-                      setModel(firstModel);
+                      // Check if current selection is invalid
+                      const currentProviderIsCustom = customProviders.some(p => p.id === provider);
+                      if (!provider || provider === 'huggingface' || (currentProviderIsCustom && !existingServer)) {
+                          setProvider(serverProvider.id);
+                          setModel(models.generate[0].id);
+                      }
                   }
 
               } catch (e: any) {
@@ -247,22 +256,22 @@ export default function App() {
       setPasswordError(false);
       try {
           const models = await fetchServerModels(accessPassword);
+          
           // Success!
+          // Find existing to preserve ID if possible
+          const customProviders = getCustomProviders();
+          const existing = customProviders.find(p => p.name === 'Server' && p.apiUrl === '/api');
+
           const serverProvider: CustomProvider = {
-              id: generateUUID(),
+              id: existing ? existing.id : generateUUID(),
               name: 'Server',
               apiUrl: '/api',
-              token: accessPassword,
+              token: accessPassword, // Important: Save the new password
               models,
               enabled: true
           };
           
-          // Remove old Server provider if exists (to update token)
-          const existing = getCustomProviders().find(p => p.name === 'Server' && p.apiUrl === '/api');
-          if (existing) {
-              serverProvider.id = existing.id; // Keep ID stable
-          }
-          addCustomProvider(serverProvider);
+          addCustomProvider(serverProvider); // This saves to localStorage
           saveServiceMode('server');
           window.dispatchEvent(new Event("storage"));
           
