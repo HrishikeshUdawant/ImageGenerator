@@ -7,12 +7,14 @@ export default defineConfig(({ mode }) => {
 
   return {
     server: {
-      port: 3000,
       host: "0.0.0.0",
-      allowedHosts: [
-        "image-generator-qxz7.onrender.com"  // <--- ADD THIS
-      ]
+      port: 3000,
+
+      // IMPORTANT FOR RENDER DEPLOYMENT
+      allowedHosts: ["image-generator-qxz7.onrender.com"],
+      origin: "https://image-generator-qxz7.onrender.com",
     },
+
     plugins: [react()],
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
@@ -20,8 +22,8 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.')
-      }
-    }
+        '@': path.resolve(__dirname, '.'),
+      },
+    },
   };
 });
