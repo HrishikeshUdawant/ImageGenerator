@@ -153,19 +153,6 @@ export const PromptInput: React.FC<PromptInputProps> = ({
 
                 <div className="flex items-center gap-2">
                     {/* Auto Translate Toggle */}
-                    <Tooltip content={autoTranslate ? t.autoTranslate : t.autoTranslate}>
-                        <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
-                            <Languages className="w-3.5 h-3.5 text-white/60" />
-                            <button
-                                onClick={() => setAutoTranslate(!autoTranslate)}
-                                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${autoTranslate ? 'bg-purple-600' : 'bg-white/10'}`}
-                            >
-                                <span
-                                    className={`${autoTranslate ? 'translate-x-3.5' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`}
-                                />
-                            </button>
-                        </div>
-                    </Tooltip>
 
                     <Tooltip content={t.optimizeTitle}>
                         <button
