@@ -7,23 +7,20 @@ export default defineConfig(({ mode }) => {
 
   return {
     server: {
-      host: "0.0.0.0",
-      port: 3000,
+  host: "0.0.0.0",
+  port: 3000,
 
-      // IMPORTANT FOR RENDER DEPLOYMENT
-      allowedHosts: ["image-generator-qxz7.onrender.com"],
-      origin: "https://image-generator-qxz7.onrender.com",
-    },
+  // 🔥 Disable host check completely
+  allowedHosts: ["*"],
 
-    plugins: [react()],
-    define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
-      },
+  // 🔥 Ensure HMR + requests allow Render domain
+  hmr: {
+    host: "image-generator-qxz7.onrender.com",
+    protocol: "https",
+  },
+
+  // Optional but helps avoid more errors
+  strictPort: true
     },
   };
 });
